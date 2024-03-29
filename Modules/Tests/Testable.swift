@@ -1,179 +1,9 @@
-import Foundation
 @_spi(ModuleReflection) import Acrylic
 @_exported import ModuleFunctions
 @_exported import Shell
-import Time
-
-public protocol TestProtocol: Module {
- associatedtype Output
- var testMode: TestMode { get }
- var breakOnError: Bool { get }
- var startMessage: String { get }
- var endMessage: String { get }
- var testName: String? { get }
- /// Performs before a test starts
- func setUp() async throws
- /// Performs when a test is finished
- func cleanUp() async throws
- /// Performs when a test completes without throwing
- func onCompletion() async throws
- @discardableResult
- func callAsTest() async throws -> Output
-}
-
-extension [any Module]: TestProtocol {}
-
+import struct Time.Timer
 import Core
-extension Module {
- @inlinable
- var typeConstructorName: String {
-  var split =
-   Swift._typeName(Self.self).split(separator: ".").dropFirst()
-  if split.first == "Modular" {
-   split.removeFirst()
-  }
 
-  var offset = 0
-  for index in split.indices {
-   let adjustedIndex = offset + index
-   guard adjustedIndex < split.endIndex else {
-    break
-   }
-
-   var substring = split[adjustedIndex]
-   if substring.contains("<") {
-    if let splitIndex = substring.firstIndex(where: { $0 == "<" }) {
-     substring = substring[...splitIndex]
-     substring.removeLast()
-     split[adjustedIndex] = substring
-     offset += 1
-
-     var remaining = split[(adjustedIndex + offset)...]
-     remaining.remove(while: { !$0.hasSuffix(">") })
-     remaining.removeLast()
-     split.replaceSubrange((adjustedIndex + offset)..., with: remaining)
-    }
-   }
-  }
-
-  if split.count > 1, let last = split.last?.last, last == ">" {
-   split.removeLast()
-  }
-
-  return split.joined(separator: ".")
- }
-
- @inlinable
- var idString: String? {
-  if !(ID.self is EmptyID.Type), !(ID.self is Never.Type) {
-   let id: ID? = if let id = self.id as? (any ExpressibleByNilLiteral) {
-    nil ~= id ? nil : self.id
-   } else {
-    id
-   }
-
-   guard let id else {
-    return nil
-   }
-
-   let string = String(describing: id).readableRemovingQuotes
-   if !string.isEmpty, string != "nil" {
-    return string
-   }
-  }
-  return nil
- }
-}
-
-public extension TestProtocol {
- @_disfavoredOverload
- func setUp() async throws {}
- @_disfavoredOverload
- func cleanUp() async throws {}
- @_disfavoredOverload
- func onCompletion() async throws {}
- @_disfavoredOverload
- var testName: String? { idString }
-
- @_disfavoredOverload
- var resolvedName: String {
-  testName?.wrapped ?? typeConstructorName
- }
-
- @_disfavoredOverload
- var breakOnError: Bool { false }
-
- @_disfavoredOverload
- var testMode: TestMode {
-  breakOnError ? .break : .fall
- }
-
- var startMessage: String {
-  let name = resolvedName
-  let marker = "[" + "-" + "]"
-  if
-   name.notEmpty,
-   !["test", "tests"].contains(where: { $0 == name.lowercased() }) {
-   return marker + .space + "\(name, style: .bold)"
-  } else {
-   return marker + .space + "\("Tests", style: .boldDim)"
-  }
- }
-
- var endMessage: String {
-  let name = resolvedName
-  if
-   name.notEmpty,
-   !["test", "tests"].contains(where: { $0 == name.lowercased() }) {
-   return
-    "\("\(name)", style: .bold) \("completed", color: .cyan, style: .bold)"
-  } else {
-   return "\("Tests", style: .bold) \("completed", color: .cyan, style: .bold)"
-  }
- }
-}
-
-public extension TestProtocol where Self: Function {
- @inline(__always)
- @discardableResult
- func callAsTest() async throws -> Output {
-  try await callAsFunction()
- }
-}
-
-public extension TestProtocol where Self: AsyncFunction {
- @inline(__always)
- @discardableResult
- func callAsTest() async throws -> Output {
-  try await callAsyncFunction()
- }
-}
-
-public enum TestMode: ExpressibleByNilLiteral, ExpressibleByBooleanLiteral {
- case none, `break`, fall
- public init(nilLiteral: ()) {
-  self = .none
- }
-
- // note: test expressions
- public init(booleanLiteral value: Bool) {
-  self = value ? .break : .fall
- }
-
- public static func ?? (lhs: Self, rhs: Self) -> Self {
-  lhs == nil ? rhs : lhs
- }
-
- @inlinable
- public var bool: Bool {
-  self == .break ? true : false
- }
-
- @inlinable
- public static prefix func ! (_ self: Self) -> Bool { !`self`.bool }
-}
-
-// - MARK: Testable Protocol
 public protocol Testable: TestProtocol {
  associatedtype Testables: Module
  @Modular
@@ -185,12 +15,9 @@ extension Modules: Testable {
  public var tests: some Module { self }
 }
 
-// TODO: Generate standard conformances
-// extension Modular.Map: Testable {}
-// extension Modular.Group: Testable {}
-
 public extension Testable {
  @_disfavoredOverload
+ @inline(__always)
  var tests: some Module { get throws { void } }
 }
 
@@ -509,6 +336,254 @@ public extension Test {
 }
 #endif
 
+/// An assertion test that be combined with a result or called independently
+public struct Assertion<ID: Hashable, A, B>: AsyncFunction {
+ public var id: ID?
+ let lhs: () async throws -> A
+ let rhs: () async throws -> B
+ /// The comparison operator for `A` and `B`
+ var `operator`: (A, B) -> Bool = { _, _ in true }
+
+ public init(
+  id: ID,
+  _ lhs: A,
+  _ operator: @escaping (A, B) -> Bool = { $0 == $1 },
+  _ rhs: B
+ ) where A: Equatable, A == B {
+  self.id = id
+  self.lhs = { lhs }
+  self.rhs = { rhs }
+  self.operator = `operator`
+ }
+
+ public init(
+  _ id: ID,
+  _ lhs: @escaping @autoclosure () throws -> A,
+  _ operator: @escaping (A, B) -> Bool = { $0 == $1 },
+  _ rhs: @escaping () async throws -> B
+ ) where A: Equatable, A == B {
+  self.id = id
+  self.lhs = lhs
+  self.rhs = rhs
+  self.operator = `operator`
+ }
+
+ public init(
+  _ id: ID,
+  _ lhs: @escaping @autoclosure () throws -> A,
+  _ operator: @escaping (A, B) -> Bool,
+  _ rhs: @escaping () async throws -> B
+ ) {
+  self.id = id
+  self.lhs = lhs
+  self.rhs = rhs
+  self.operator = `operator`
+ }
+
+ public init(
+  id: ID,
+  _ lhs: @escaping () async throws -> A,
+  _ operator: @escaping (A, B) -> Bool = { $0 == $1 },
+  _ rhs: @escaping @autoclosure () throws -> B
+ ) where A: Equatable, A == B {
+  self.id = id
+  self.lhs = lhs
+  self.rhs = rhs
+  self.operator = `operator`
+ }
+
+ public init(
+  id: ID,
+  _ lhs: @escaping () async throws -> A,
+  _ operator: @escaping (A, B) -> Bool,
+  _ rhs: @escaping @autoclosure () throws -> B
+ ) {
+  self.id = id
+  self.lhs = lhs
+  self.rhs = rhs
+  self.operator = `operator`
+ }
+
+ public init(
+  _ lhs: A,
+  _ operator: @escaping (A, B) -> Bool = { $0 == $1 },
+  _ rhs: B
+ ) where ID == EmptyID, A: Equatable, A == B {
+  self.lhs = { lhs }
+  self.rhs = { rhs }
+  self.operator = `operator`
+ }
+
+ public init(
+  _ lhs: @escaping @autoclosure () throws -> A,
+  _ operator: @escaping (A, B) -> Bool = { $0 == $1 },
+  _ rhs: @escaping () async throws -> B
+ ) where ID == EmptyID, A: Equatable, A == B {
+  self.lhs = lhs
+  self.rhs = rhs
+  self.operator = `operator`
+ }
+
+ public init(
+  _ lhs: @escaping @autoclosure () throws -> A,
+  _ operator: @escaping (A, B) -> Bool,
+  _ rhs: @escaping () async throws -> B
+ ) where ID == EmptyID {
+  self.lhs = lhs
+  self.rhs = rhs
+  self.operator = `operator`
+ }
+
+ public init(
+  _ lhs: @escaping () async throws -> A,
+  _ operator: @escaping (A, B) -> Bool = { $0 == $1 },
+  _ rhs: @escaping @autoclosure () throws -> B
+ ) where ID == EmptyID, A: Equatable, A == B {
+  self.lhs = lhs
+  self.rhs = rhs
+  self.operator = `operator`
+ }
+
+ public init(
+  _ lhs: @escaping () async throws -> A,
+  _ operator: @escaping (A, B) -> Bool,
+  _ rhs: @escaping @autoclosure () throws -> B
+ ) where ID == EmptyID {
+  self.lhs = lhs
+  self.rhs = rhs
+  self.operator = `operator`
+ }
+
+ public struct Error: TestError {
+  let lhs: A
+  let rhs: B
+  public var errorDescription: String? {
+   if A.self is Bool.Type, B.self is Swift.Void.Type {
+    "Asserted condition wasn't met"
+   } else {
+    """
+    \n\tExpected condition from \(lhs, style: .underlined) \
+    to \(rhs, style: .underlined) wasn't met
+    """
+   }
+  }
+ }
+
+ @discardableResult
+ public func callAsyncFunction() async throws -> B {
+  let lhs = try await lhs()
+  let rhs = try await rhs()
+
+  guard self.operator(lhs, rhs) else {
+   throw Error(lhs: lhs, rhs: rhs)
+  }
+
+  return rhs
+ }
+}
+
+public extension TestProtocol {
+ typealias Assert<ID, A, B> = Assertion<ID, A, B> where ID: Hashable
+}
+
+public extension Assertion where A == Bool, B == Swift.Void {
+ init(
+  _ id: ID,
+  condition: @escaping () async throws -> Bool
+ ) {
+  self.id = id
+  lhs = condition
+  rhs = {}
+  self.operator = { condition, _ in condition }
+ }
+
+ init(
+  _ id: ID, _ condition: @escaping @autoclosure () throws -> Bool
+ ) {
+  self.id = id
+  lhs = condition
+  rhs = {}
+  self.operator = { condition, _ in condition }
+ }
+
+ init(condition: @escaping () async throws -> Bool)
+  where ID == EmptyID {
+  lhs = condition
+  rhs = {}
+  self.operator = { condition, _ in condition }
+ }
+
+ init(_ condition: @escaping @autoclosure () throws -> Bool)
+  where ID == EmptyID {
+  lhs = condition
+  rhs = {}
+  self.operator = { condition, _ in condition }
+ }
+}
+
+// MARK: - Coalescing Assertions
+public extension Function where Output: Equatable {
+ static func == (lhs: Self, rhs: Output) -> Assertion<ID, Output, Output> {
+  Assertion(id: lhs.id, lhs.callAsFunction, ==, rhs)
+ }
+
+ static func != (lhs: Self, rhs: Output) -> Assertion<ID, Output, Output> {
+  Assertion(id: lhs.id, lhs.callAsFunction, !=, rhs)
+ }
+}
+
+public extension AsyncFunction where Output: Equatable {
+ static func == (lhs: Self, rhs: Output) -> Assertion<ID, Output, Output> {
+  Assertion(id: lhs.id, lhs.callAsyncFunction, ==, rhs)
+ }
+
+ static func != (lhs: Self, rhs: Output) -> Assertion<ID, Output, Output> {
+  Assertion(id: lhs.id, lhs.callAsyncFunction, !=, rhs)
+ }
+}
+
+public extension Function where Output: Comparable {
+ static func < (lhs: Self, rhs: Output) -> Assertion<ID, Output, Output> {
+  Assertion(id: lhs.id, lhs.callAsFunction, <, rhs)
+ }
+
+ static func > (lhs: Self, rhs: Output) -> Assertion<ID, Output, Output> {
+  Assertion(id: lhs.id, lhs.callAsFunction, >, rhs)
+ }
+}
+
+public extension AsyncFunction where Output: Comparable {
+ static func < (lhs: Self, rhs: Output) -> Assertion<ID, Output, Output> {
+  Assertion(id: lhs.id, lhs.callAsyncFunction, <, rhs)
+ }
+
+ static func > (lhs: Self, rhs: Output) -> Assertion<ID, Output, Output> {
+  Assertion(id: lhs.id, lhs.callAsyncFunction, >, rhs)
+ }
+}
+
+public extension Function where Output: Equatable & Comparable {
+ static func <= (lhs: Self, rhs: Output) -> Assertion<ID, Output, Output> {
+  Assertion(id: lhs.id, lhs.callAsFunction, <=, rhs)
+ }
+
+ static func >= (lhs: Self, rhs: Output) -> Assertion<ID, Output, Output> {
+  Assertion(id: lhs.id, lhs.callAsFunction, >=, rhs)
+ }
+}
+
+public extension AsyncFunction where Output: Equatable & Comparable {
+ static func <= (lhs: Self, rhs: Output) -> Assertion<ID, Output, Output> {
+  Assertion(id: lhs.id, lhs.callAsyncFunction, <=, rhs)
+ }
+
+ static func >= (lhs: Self, rhs: Output) -> Assertion<ID, Output, Output> {
+  Assertion(id: lhs.id, lhs.callAsyncFunction, >=, rhs)
+ }
+}
+
+/// Executes a void funtion while minimizing compiler optimizations that could
+/// interfere with testing
 public struct Blackhole<ID: Hashable>: AsyncFunction {
  public var id: ID?
  @inline(never)
@@ -540,6 +615,8 @@ public struct Blackhole<ID: Hashable>: AsyncFunction {
  public func callAsyncFunction() async throws { try await perform() }
 }
 
+/// Executes a return funtion while minimizing compiler optimizations that could
+/// interfere with testing
 public struct Identity<ID: Hashable, Output>: AsyncFunction {
  public var id: ID?
  @inline(never)
