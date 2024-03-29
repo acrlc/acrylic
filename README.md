@@ -7,4 +7,5 @@
 Please read the [project page](https://github.com/users/acrlc/projects/1), file issues, and create pull requests if interested
 
 #### Open Source Credits
-- [ReflectionMiror](https://github.com/philipturner/swift-reflection-mirror) (also used in [Command](https://github.com/acrlc/command))
+- [ReflectionMirror](https://github.com/philipturner/swift-reflection-mirror) (also used in [Command](https://github.com/acrlc/command))
+- [Chalk](https://github.com/mxcl/Chalk) (used in `Tests` library)
