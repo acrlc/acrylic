@@ -393,20 +393,21 @@ public struct Test<ID: Hashable, Results: Module>: Testable {
  public var setUpHandler: (() async throws -> ())?
  public var onCompletionHandler: (() async throws -> ())?
  public var cleanUpHandler: (() async throws -> ())?
- 
+
  @Modular
  var handler: () async throws -> Results
 
  public func setUp() async throws {
   try await setUpHandler?()
  }
- 
+
  public func onCompletion() async throws {
   try await onCompletionHandler?()
  }
- 
+
  public func cleanUp() async throws {
   try await cleanUpHandler?()
+ }
 
  public var tests: Modules {
   get async throws { try await handler() }
@@ -415,7 +416,7 @@ public struct Test<ID: Hashable, Results: Module>: Testable {
 
 public extension Test {
  init(
-  _ id: ID, 
+  _ id: ID,
   breakOnError: Bool = false,
   setUp: (() async throws -> ())? = nil,
   onCompletion: (() async throws -> ())? = nil,
@@ -424,9 +425,9 @@ public extension Test {
  ) {
   self.id = id
   self.breakOnError = breakOnError
-  self.setUpHandler = setUp
-  self.onCompletionHandler = onCompletion
-  self.cleanUpHandler = cleanUp
+  setUpHandler = setUp
+  onCompletionHandler = onCompletion
+  cleanUpHandler = cleanUp
   self.handler = handler
  }
 
@@ -438,9 +439,9 @@ public extension Test {
   @Modular handler: @escaping () async throws -> Results
  ) where ID == EmptyID {
   self.breakOnError = breakOnError
-  self.setUpHandler = setUp
-  self.onCompletionHandler = onCompletion
-  self.cleanUpHandler = cleanUp
+  setUpHandler = setUp
+  onCompletionHandler = onCompletion
+  cleanUpHandler = cleanUp
   self.handler = handler
  }
 }
@@ -452,7 +453,7 @@ public struct Test<ID: Hashable, Results: Module>: Testable {
  public var setUpHandler: (() async throws -> ())?
  public var onCompletionHandler: (() async throws -> ())?
  public var cleanUpHandler: (() async throws -> ())?
- 
+
  @Modular
  var handler: () throws -> Results
 
@@ -486,9 +487,9 @@ public extension Test {
  ) {
   self.id = id
   self.breakOnError = breakOnError
-  self.setUpHandler = setUp
-  self.onCompletionHandler = onCompletion
-  self.cleanUpHandler = cleanUp
+  setUpHandler = setUp
+  onCompletionHandler = onCompletion
+  cleanUpHandler = cleanUp
   self.handler = handler
  }
 
@@ -500,9 +501,9 @@ public extension Test {
   @Modular handler: @escaping () throws -> Results
  ) where ID == EmptyID {
   self.breakOnError = breakOnError
-  self.setUpHandler = setUp
-  self.onCompletionHandler = onCompletion
-  self.cleanUpHandler = cleanUp
+  setUpHandler = setUp
+  onCompletionHandler = onCompletion
+  cleanUpHandler = cleanUp
   self.handler = handler
  }
 }
@@ -512,17 +513,17 @@ public struct Blackhole<ID: Hashable>: AsyncFunction {
  public var id: ID?
  @inline(never)
  let perform: () async throws -> ()
- 
+
  public init(_ id: ID, _ perform: @escaping () async throws -> some Any) {
   self.id = id
   self.perform = { _ = perform }
  }
- 
+
  public init(_ perform: @escaping () async throws -> some Any)
- where ID == EmptyID {
+  where ID == EmptyID {
   self.perform = { _ = perform }
  }
- 
+
  public init(
   _ id: ID,
   _ perform: @escaping @autoclosure () throws -> some Any
@@ -530,12 +531,12 @@ public struct Blackhole<ID: Hashable>: AsyncFunction {
   self.id = id
   self.perform = { _ = perform }
  }
- 
+
  public init(_ perform: @escaping @autoclosure () throws -> some Any)
- where ID == EmptyID {
+  where ID == EmptyID {
   self.perform = { _ = perform }
  }
- 
+
  public func callAsyncFunction() async throws { try await perform() }
 }
 
@@ -543,27 +544,27 @@ public struct Identity<ID: Hashable, Output>: AsyncFunction {
  public var id: ID?
  @inline(never)
  let result: () async throws -> Output
- 
+
  public init(_ id: ID, _ result: @escaping () async throws -> Output) {
   self.id = id
   self.result = result
  }
- 
+
  public init(_ result: @escaping () async throws -> Output)
- where ID == EmptyID {
+  where ID == EmptyID {
   self.result = result
  }
- 
+
  public init(_ id: ID, _ result: @escaping @autoclosure () throws -> Output) {
   self.id = id
   self.result = result
  }
- 
+
  public init(_ result: @escaping @autoclosure () throws -> Output)
- where ID == EmptyID {
+  where ID == EmptyID {
   self.result = result
  }
- 
+
  public func callAsyncFunction() async throws -> Output {
   try await result()
  }

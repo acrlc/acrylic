@@ -1,13 +1,22 @@
 @_spi(ModuleReflection)
 public final class Reflection: @unchecked Sendable, Identifiable, Equatable {
+ #if swift(>=5.10)
+ public nonisolated(unsafe)
+ static var states: [AnyHashable: ModuleState] = .empty
+ #else
  public static let shared = Reflection()
+
+ var states: [AnyHashable: ModuleState] = .empty
+
+ public static var states: [AnyHashable: ModuleState] {
+  get { shared.states }
+  set { shared.states = newValue }
+ }
+ #endif
+
  public static func == (lhs: Reflection, rhs: Reflection) -> Bool {
   lhs.id == rhs.id
  }
-
- @_spi(ModuleReflection)
- public nonisolated(unsafe)
- static var states: [AnyHashable: ModuleState] = .empty
 }
 
 extension Reflection {

@@ -8,15 +8,14 @@ final class ReflectionTests: XCTestCase {
   first.forward { index in
    print(index.start.value)
   }
-  print(state.values.map({ $0._flattened.map { $0._id(from: first) } }))
+  print(state.values.map { $0._flattened.map { $0._id(from: first) } })
 
   let context = try XCTUnwrap(first.value._context(from: first))
 
   try await context.callTasks()
-  
+
   context.cancel()
   try await context.callTasks()
-
  }
 }
 

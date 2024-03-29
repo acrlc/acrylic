@@ -204,7 +204,9 @@ public extension Modular {
   }
 
   public func callAsFunction() throws {
-   while try perform() { continue }
+   while try perform() {
+    continue
+   }
   }
  }
 
@@ -237,7 +239,9 @@ public extension Modular {
   }
 
   public func callAsFunction() throws {
-   repeat { try perform() } while true
+   repeat {
+    try perform()
+   } while true
   }
  }
 }
@@ -309,7 +313,9 @@ public extension Modular.Repeat {
   public var detached: Bool = false
   public let perform: () async throws -> Bool
   public func callAsyncFunction() async throws {
-   while try await perform() { continue }
+   while try await perform() {
+    continue
+   }
   }
  }
 }
@@ -345,7 +351,9 @@ public extension Modular.Loop {
   public var detached: Bool = false
   public let perform: () async throws -> ()
   public func callAsyncFunction() async throws {
-   repeat { try await perform() } while true
+   repeat {
+    try await perform()
+   } while true
   }
  }
 }

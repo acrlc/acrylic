@@ -32,7 +32,10 @@ extension Module {
  @_spi(ModuleReflection)
  @_disfavoredOverload
  @inlinable
- public mutating func mutatingCallWithContext(id: AnyHashable? = nil) async throws {
+ public mutating func mutatingCallWithContext(
+  id: AnyHashable? =
+   nil
+ ) async throws {
   let id = id ?? AnyHashable(id)
   let shouldUpdate = Reflection.cacheIfNeeded(self, id: id)
   let index = Reflection.states[id].unsafelyUnwrapped.indices[0][0]
@@ -46,7 +49,7 @@ extension Module {
   try await context.callTasks()
   self = index.value as! Self
  }
- 
+
  @_spi(ModuleReflection)
  @_disfavoredOverload
  @inlinable
@@ -55,15 +58,14 @@ extension Module {
   let shouldUpdate = Reflection.cacheIfNeeded(self, id: id)
   let index = Reflection.states[id].unsafelyUnwrapped.indices[0][0]
   let context = index.value._context(from: index).unsafelyUnwrapped
-  
+
   if shouldUpdate {
    context.update()
    try await context.updateTask?.value
   }
-  
+
   try await context.callTasks()
  }
-
 
  @usableFromInline
  static var _mangledName: String {

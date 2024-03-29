@@ -46,6 +46,7 @@ extension StaticModule {
   Self.context.objectWillChange
  }
 }
+
 #elseif canImport(OpenCombine)
 import OpenCombine
 extension StaticModule {

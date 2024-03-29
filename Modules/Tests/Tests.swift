@@ -43,7 +43,7 @@ public struct Assertion<ID: Hashable, A, B>: AsyncFunction {
   self.rhs = { rhs }
   self.operator = `operator`
  }
- 
+
  public init(
   _ id: ID,
   _ lhs: @escaping @autoclosure () throws -> A,

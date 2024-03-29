@@ -84,7 +84,7 @@ extension Tasks {
   let test = index.value
 
   let isTest = test is any TestProtocol
-  
+
   if isTest {
    try await (test as! any TestProtocol).setUp()
   }
@@ -194,12 +194,11 @@ extension Tasks {
    }
 
    print(endMessage)
-   
+
    if isTest {
     try await (test as! any TestProtocol).onCompletion()
     try await (test as! any TestProtocol).cleanUp()
    }
-
 
    return results
   } catch {
@@ -215,7 +214,7 @@ extension Tasks {
     if isTest {
      try await (test as! any TestProtocol).cleanUp()
     }
-    
+
     throw TestsError(message: message)
    }
   }

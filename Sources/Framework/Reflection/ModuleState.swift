@@ -76,11 +76,9 @@ public extension ModuleState {
    rebase(start, with: voids, recurse)
   } else {
    let key = module._id(from: index)
-   let context = ModuleContext.cache
-    .withLockUnchecked { $0[key] } ?? { [weak self] in
-     assert(self != nil, "state was deallocated")
-     return ModuleContext.cached(index, with: self!, key: key)
-    }()
+   let context =
+    ModuleContext.cache.withLockUnchecked { $0[key] } ??
+    ModuleContext.cached(index, with: self, key: key)
 
    if module.hasVoid {
     // recurse if module contains void
