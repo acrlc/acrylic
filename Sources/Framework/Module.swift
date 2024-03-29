@@ -1,12 +1,5 @@
 public protocol Module: Identifiable {
  associatedtype VoidFunction: Module
- /// The contextual building blocks for modules that allows the
- /// creation of a repeatable structure and shared context either through
- /// Some applications require static functionality which doesn't update the
- /// structure of a module
- /// Some applications require dynamic functionality which updates the structure
- /// of a module and it's tasks
- /// Some application require
  @Modular
  var void: VoidFunction { get }
 }
