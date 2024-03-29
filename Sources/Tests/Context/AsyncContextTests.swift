@@ -52,8 +52,13 @@ struct TestAsyncContext: Tests {
     await value.defect()
     try (!context.isRunning).throwing()
    }
-
-   Test("Assert Context Retained") {
+   
+   // assert that the module context was updated to false
+   Assert("Module Update", !value.should)
+   // assert that module structure was changed
+   Assert("Structure Update", value.throwError)
+   
+   Test("Assert Context Retained w/ Results") {
     Identity {
      try await state.callAsFunction(context)
 
@@ -68,11 +73,6 @@ struct TestAsyncContext: Tests {
      return try (results[id] as? [Bool])
       .throwing(reason: "results not returned")
     } == [true]
-
-    // assert that the module context was updated to false
-    Assert("Module Update", !value.should)
-    // assert that module structure was changed
-    Assert("Structure Update", value.throwError)
    }
   }
  }
