@@ -15,8 +15,10 @@ import SwiftUI
 struct AcrylicTests: Tests {
  @Context
  var breakOnError = true
+ #if os(WASI) || canImport(SwiftUI)
  @State
  var disabled = true
+ #endif
 
  var tests: some Testable {
   Test("Assertions / Break") {
