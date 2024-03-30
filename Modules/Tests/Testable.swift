@@ -677,6 +677,7 @@ extension Benchmarks: TestProtocol {
 
     if results.notEmpty {
      print(
+      String.space,
       "\("return", style: .boldDim)",
       "\("\(results[0])".readableRemovingQuotes, style: .bold)"
      )
