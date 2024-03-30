@@ -254,7 +254,11 @@ extension ModuleContext {
  func callTestResults(
   _ value: any Module, with state: TestState<some Testable>
  ) async throws -> [Sendable]? {
-  try await tasks.callAsTest(from: self, with: state)
+  if let detachable = value as? Detachable, detachable.detached {
+   return try await tasks.callAsFunction()
+  }
+  
+  return try await tasks.callAsTest(from: self, with: state)
  }
 }
 

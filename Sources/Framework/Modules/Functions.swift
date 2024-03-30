@@ -1,7 +1,11 @@
 import Foundation
 
+public protocol Detachable {
+ var detached: Bool { get set }
+}
+
 /// A module that performs a function when called
-public protocol Function: Module {
+public protocol Function: Detachable, Module {
  associatedtype Output: Sendable
  typealias Priority = TaskPriority
  var priority: Priority? { get set }
@@ -21,8 +25,8 @@ public extension Function {
 }
 
 public extension Function where Output == Never {
+ @_spi(ModuleReflection)
  @_disfavoredOverload
- @inlinable
  func callAsFunction() -> Never {
   fatalError("\(_type) '\(Self.self)' should define \(#function)")
  }
@@ -34,7 +38,7 @@ public extension Function where VoidFunction == Empty {
 }
 
 /// A module that explicitly performs an asynchronous function
-public protocol AsyncFunction: Module {
+public protocol AsyncFunction: Detachable, Module {
  associatedtype Output: Sendable
  typealias Priority = TaskPriority
  var priority: Priority? { get set }
@@ -58,9 +62,9 @@ public extension AsyncFunction {
  }
 }
 
-extension AsyncFunction where Output == Never {
+public extension AsyncFunction where Output == Never {
+ @_spi(ModuleReflection)
  @_disfavoredOverload
- @inlinable
  func callAsyncFunction() async throws -> Never {
   fatalError("\(_type) '\(Self.self)' should define \(#function)")
  }
@@ -250,7 +254,7 @@ public extension Modular.Perform {
  struct Async: AsyncFunction {
   public var id: ID?
   public var priority: Priority?
-  public let detached: Bool
+  public var detached: Bool
   public let action: () async throws -> Output
 
   public func callAsyncFunction() async throws -> Output {
@@ -282,6 +286,7 @@ public extension Modular.Perform.Async {
   self.action = action
  }
 
+ @_disfavoredOverload
  init(
   _ id: ID,
   priority: Priority? = nil,
@@ -294,6 +299,7 @@ public extension Modular.Perform.Async {
   )
  }
 
+ @_disfavoredOverload
  init(
   priority: Priority? = nil,
   detached: Bool = false,
