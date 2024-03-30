@@ -70,8 +70,8 @@ extension Module {
   Swift._typeName(Self.self)
  }
 
- @usableFromInline
- var _type: ModuleType {
+ @_spi(ModuleReflection)
+ public var _type: ModuleType {
   self is any AsyncFunction
    ? .asyncFunction
    : self is any Function ? .function : .module

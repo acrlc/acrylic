@@ -1,10 +1,10 @@
 public struct ModuleType: @unchecked Sendable, OptionSet, Hashable {
  public let rawValue: UInt
  public init(rawValue: UInt) { self.rawValue = rawValue }
- static let module: Self = []
- static let function = Self(rawValue: 1 << 0)
- static let async = Self(rawValue: 1 << 1)
- static let asyncFunction: Self = [async, function]
+ public static let module: Self = []
+ public static let function = Self(rawValue: 1 << 0)
+ public static let async = Self(rawValue: 1 << 1)
+ public static let asyncFunction: Self = [async, function]
 }
 
 extension ModuleType: CaseIterable, CustomStringConvertible {
