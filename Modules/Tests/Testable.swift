@@ -23,7 +23,7 @@ public extension Testable {
 
 public extension Testable {
  // swiftlint:disable:next function_body_length cyclomatic_complexity
- func test(_ modules: Modules, timer: inout TimerProtocol) async throws {
+ func test(_ modules: Modules, timer: inout Timer) async throws {
   for test in modules {
    let isTest = test is any TestProtocol
    let name = test.typeConstructorName
@@ -184,7 +184,7 @@ public extension Testable {
    let startMessage = startMessage
    print(startMessage)
 
-   var timer: TimerProtocol = Timer()
+   var timer = Timer()
 
    started = true
    start.fire()
