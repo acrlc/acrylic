@@ -7,57 +7,55 @@ final class TestState<A: Testable>: ModuleState {
  var timer = Timer()
  var baseTest: A { values[0][0] as! A }
 
- func rebase(
-  _ index: Index, with voids: Modules,
-  _ content: (Index) async throws -> Value?
- ) async rethrows {
-  if voids.notEmpty {
-   if let voids = voids as? [[Value]] {
-    if voids.count == 1 {
-     // rebase void array
-     try await index.rebase(voids.first!, content)
-    } else {
-     // rebase recursive array
-     try await index.rebase(voids, content)
-    }
-   } else {
-    // rebase array array
-    try await index.rebase(voids, content)
-   }
-  }
- }
-
  func recurse(_ index: Index) async throws -> Value? {
   var module: Value {
    get { index.value }
    set { index.value = newValue }
   }
 
-  if index != .start, let voids = module as? Modules {
-   // rebase using the start index
-   try await rebase(start, with: voids, recurse)
-  } else {
-   let key = module._id(from: index)
-   let context =
-    ModuleContext.cache.withLockUnchecked { $0[key] } ??
-    .cached(index, with: self, key: key)
+  let key = index.key
 
-   if module.hasVoid || module is (any Testable) {
-    defer { self.start = nil }
-    start = index
-    // recurse if module contains void
-    if let tests = try await (module as? any Testable)?.tests as? Modules {
-     if !index.isStart {
-      assert(!(index.value is A), "A test cannot recursively contain itself")
-     }
-     try await index.rebase(tests, recurse)
-    } else if module.void.notEmpty {
-     try await index.rebase(module.void as? Modules ?? [module.void], recurse)
-    }
-   }
-   return module.finalizeTest(with: index, context: context, key: key)
+  let context =
+   ModuleContext.cache.withLockUnchecked { $0[key] } ??
+   .cached(index, with: self, key: key)
+
+  if module.hasVoid || module is (any Testable) {
+   let void =
+    try await (module as? any Testable)?.tests as? Modules ??
+    module.void
+   let voids = (void as? Modules ?? [void])
+
+   try await index.rebase(voids, recurse)
   }
-  return nil
+
+  return module.finalizeTest(with: index, context: context, key: key)
+ }
+}
+
+extension ModuleState.Index {
+ @discardableResult
+ /// Start indexing from the current index
+ func step(_ content: (Self) async throws -> Value?) async rethrows -> Value? {
+  try await content(self)
+ }
+
+ /// Add base values to the current index
+ func rebase(
+  _ base: Base,
+  _ content: (Self) async throws -> Value?
+ ) async rethrows {
+  for element in base {
+   let projectedIndex = elements.endIndex
+   let projectedOffset = self.base.endIndex
+   let projection: Self = .next(with: self)
+   self.base.append(element)
+
+   if try await content(projection) != nil {
+    elements.insert(projection, at: projectedIndex)
+   } else if projectedOffset < self.base.endIndex {
+    self.base.remove(at: projectedOffset)
+   }
+  }
  }
 }
 
@@ -85,10 +83,6 @@ extension Tasks {
 
   let isTest = test is any TestProtocol
 
-  if isTest {
-   try await (test as! any TestProtocol).setUp()
-  }
-
   let name = test.typeConstructorName
   let baseName =
    context.index.withLockUnchecked { $0.start.value }.typeConstructorName
@@ -102,6 +96,7 @@ extension Tasks {
 
   if !index.isStart {
    if isTest {
+    try await (test as! any TestProtocol).setUp()
     if let label {
      print(
       "\n[ \(label, style: .bold) ]",
@@ -133,12 +128,14 @@ extension Tasks {
     "\(endTime + .space, style: .boldDim)"
   }
 
-  timer.fire()
   task = Task {
    var results: [Sendable] = .empty
+
+   state.timer.fire()
+
    for task in current {
     if task.detached {
-     Task { try await task() }
+     self.detached.append(Task { try await task() })
     }
     else {
      try await results.append(task())
@@ -151,6 +148,10 @@ extension Tasks {
    let results = try await task.unsafelyUnwrapped.value
 
    endTime = timer.elapsed.description
+
+   for task in detached {
+    try await task.wait()
+   }
 
    var result = results[0]
    var valid = true
@@ -229,22 +230,24 @@ extension ModuleContext {
    let task = Task {
     let baseModule = baseIndex.value
     self.results = .empty
-    self.results![baseModule._id(from: baseIndex)] =
+    self.results![baseIndex.key] =
      try await self.callTestResults(baseModule, with: state)
 
     let baseElements = baseIndex.elements
     guard baseElements.count > 1 else {
      return
     }
-    let elements = baseElements.dropFirst()
-    for index in elements {
-     let module = index.value
-     let context = module._context(from: index).unsafelyUnwrapped
 
-     self.results![module._id(from: index)] =
-      try await context.callTestResults(module, with: state)
+    let elements = baseElements.dropFirst().map {
+     ($0, $0.context.unsafelyUnwrapped)
+    }
+
+    for (index, context) in elements {
+     self.results![index.key] =
+      try await context.callTestResults(index.value, with: state)
     }
    }
+
    self.calledTask = task
    return task
   }.value
@@ -257,7 +260,7 @@ extension ModuleContext {
   if let detachable = value as? Detachable, detachable.detached {
    return try await tasks.callAsFunction()
   }
-  
+
   return try await tasks.callAsTest(from: self, with: state)
  }
 }
@@ -291,38 +294,10 @@ extension Reflection {
    let index = initialState.indices[0][0]
 
    try await index.step(initialState.recurse)
-   initialState.start = nil
 
    return false
   }
   return true
- }
-}
-
-extension ModuleState.Index {
- @discardableResult
- /// Start indexing from the current index
- func step(_ content: (Self) async throws -> Value?) async rethrows -> Value? {
-  try await content(self)
- }
-
- /// Add base values to the current index
- func rebase(
-  _ base: Base,
-  _ content: (Self) async throws -> Value?
- ) async rethrows {
-  for element in base {
-   let projectedIndex = elements.endIndex
-   let projectedOffset = self.base.endIndex
-   let projection: Self = .next(with: self)
-   self.base.append(element)
-
-   if try await content(projection) != nil {
-    elements.insert(projection, at: projectedIndex)
-   } else {
-    self.base.remove(at: projectedOffset)
-   }
-  }
  }
 }
 
@@ -341,6 +316,7 @@ extension TestProtocol {
 }
 
 public extension Module {
+ @discardableResult
  func finalizeTest(
   with index: ModuleState.Index, context: ModuleContext, key: AnyHashable
  ) -> any Module {
@@ -352,5 +328,39 @@ public extension Module {
    return test._finalizeTest(with: index, context: context, key: key)
   }
   return self
+ }
+}
+
+/* MARK: - Test Helpers */
+public extension Task {
+ @discardableResult
+ func wait() async throws -> Success {
+  try await value
+ }
+}
+
+public extension Task where Failure == Never {
+ @discardableResult
+ func wait() async -> Success {
+  await value
+ }
+}
+
+extension Module {
+ @usableFromInline
+ var isIdentifiable: Bool {
+  !(ID.self is Never.Type) && !(id is EmptyID)
+ }
+}
+
+extension ModuleState.Index: CustomStringConvertible {
+ public var description: String {
+  if value.isIdentifiable {
+   let description = String(describing: value.id).readableRemovingQuotes
+   if description != "nil" {
+    return "\(value.typeConstructorName)[\(description)](\(index), \(offset)) | \(range))"
+   }
+  }
+  return "\(value.typeConstructorName)(\(index), \(offset) | \(range))"
  }
 }

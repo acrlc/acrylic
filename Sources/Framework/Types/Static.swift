@@ -15,19 +15,23 @@ extension StaticModule {
 
 public extension StaticModule {
  unowned static var context: ModuleContext {
-  let module = index.value
-  return module._context(from: index).unsafelyUnwrapped
+  ModuleContext.cache.withLockUnchecked { $0[index.key] }!
  }
 
  @inlinable
- func callContext() { Self.context.callAsFunction() }
+ func callContext() {
+  Self.context.callAsFunction()
+ }
+
  @inlinable
  func cancelContext() {
   Self.context.cancel()
  }
 
  @inlinable
- static func updateContext() { context.update() }
+ static func updateContext() {
+  context.updateTask = Task { try await context.update() }
+ }
 
  @discardableResult
  @inlinable

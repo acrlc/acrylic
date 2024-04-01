@@ -15,8 +15,12 @@ public final class ModuleContext: Identifiable, Equatable, Operational {
   OSAllocatedUnfairLock<ModuleState.Index>(initialState: .start)
 
  /// Stored values that are relevant to framework specific property wrappers
+// @usableFromInline
+// var values: [AnyHashable: Any] = .empty
  @usableFromInline
- var values: [AnyHashable: Any] = .empty
+ var values =
+  OSAllocatedUnfairLock<[AnyHashable: Any]>(initialState: .empty)
+
  public lazy var tasks = Tasks(id: self.id)
 
  /// The currently executing update function
@@ -71,56 +75,69 @@ public extension ModuleContext {
    let elements = baseElements.dropFirst()
 
    for index in elements.reversed() {
-    let module = index.value
-    let id = {
-     if module.isIdentifiable {
-      let description = String(describing: module.id).readableRemovingQuotes
-      if description != "nil" {
-       return "\(description)(\(index.hashValue))".hashValue
-      }
-     }
-     return index.hashValue
-    }()
-    guard
-     let context: ModuleContext = (
-      ModuleContext.cache.withLockUnchecked { $0[id] }
-     ) else {
-     #if DEBUG
-     print(index, "was Deallocated", separator: .newline)
-     #endif
-     continue
-    }
-
+    let key = index.key
+    let context = index.context.unsafelyUnwrapped
     let offset = index.offset
 
     context.tasks.cancel()
     index.base.remove(at: offset)
     index.elements.remove(at: offset)
-    _ = ModuleContext.cache.withLockUnchecked { $0.removeValue(forKey: id) }
+    _ = ModuleContext.cache.withLockUnchecked { $0.removeValue(forKey: key) }
    }
   }
  }
 
- @_spi(ModuleReflection)
  @inlinable
- var isRunning: Bool {
-  index.withLockUnchecked { index in
-   self.tasks.isRunning &&
-    index.elements.dropFirst().contains(
-     where: { index in
-      let module = index.value
-      return Self.cache.withLockUnchecked {
-       $0[module._id(from: index)]?.tasks.isRunning ==
-        true
-      }
-     }
-    )
+ var isRunning: Bool { tasks.isRunning }
+
+ /// Allow all called tasks to finish, excluding detached tasks
+ @inlinable
+ func wait() async throws {
+  try await calledTask?.wait()
+ }
+
+ /// Allow all called tasks to finish, including detached tasks
+ @inlinable
+ func waitForAll() async throws {
+  try await wait()
+  assert(tasks.isEmpty)
+
+  for task in tasks.detached {
+   try await task.wait()
   }
+
+  try await index.withLockUnchecked { baseIndex in
+   let baseIndex = baseIndex
+   return Task {
+    let baseElements = baseIndex.elements
+    guard baseElements.count > 1 else {
+     return
+    }
+
+    for tasks in baseElements.dropFirst().map(\.context!.tasks) {
+     assert(tasks.isEmpty)
+
+     for task in tasks.detached {
+      try await task.wait()
+     }
+    }
+   }
+  }.value
  }
 }
 
 /* MARK: - Update Functions */
 public extension ModuleContext {
+ @inline(__always)
+ func callAsFunction() async throws {
+  try await state.callAsFunction(self)
+ }
+
+ @inline(__always)
+ func update() async throws {
+  state.update(self)
+ }
+
  func callAsFunction(state: ModuleState) {
   updateTask = Task {
    try await state.callAsFunction(self)
@@ -139,12 +156,6 @@ public extension ModuleContext {
    state.update(prior)
   }
  }
-
- func update() {
-  updateTask = Task {
-   state.update(self)
-  }
- }
 }
 
 public extension ModuleContext {
@@ -156,45 +167,24 @@ public extension ModuleContext {
    let baseIndex = baseIndex
 
    let task = Task {
-    let baseModule = baseIndex.value
-
     self.results = .empty
-    self.results![baseModule._id(from: baseIndex)] = try await self.tasks()
+    self.results![baseIndex.key] = try await self.tasks()
 
     let baseElements = baseIndex.elements
     guard baseElements.count > 1 else {
      return
     }
-    let elements = baseElements.dropFirst()
-    for index in elements {
-     let module = index.value
-     guard let context = module._context(from: index) else {
-      continue
-     }
+    let elements = baseElements.dropFirst().map {
+     ($0, $0.context.unsafelyUnwrapped)
+    }
 
-     self.results![module._id(from: index)] = try await context.tasks()
+    for (index, context) in elements {
+     self.results![index.key] = try await context.tasks()
     }
    }
+
    self.calledTask = task
    return task
   }.value
- }
-}
-
-/* MARK: - Module Extensions*/
-@_spi(ModuleReflection)
-public extension Module {
- func _id(from index: ModuleState.Index) -> Int {
-  if isIdentifiable {
-   let description = String(describing: id).readableRemovingQuotes
-   if description != "nil" {
-    return "\(description)(\(index.hashValue))".hashValue
-   }
-  }
-  return index.hashValue
- }
-
- func _context(from index: ModuleState.Index) -> ModuleContext? {
-  ModuleContext.cache.withLockUnchecked { $0[self._id(from: index)] }
  }
 }

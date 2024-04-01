@@ -1,6 +1,8 @@
 import Benchmarks
+import Time
 
 struct TestTimerView: Tests {
+ var pressure: Size = 2
  let assert: KeyValuePairs<String, Duration> = [
   "0:00:45": .seconds(45),
   "0:01:00": .seconds(60),
@@ -41,13 +43,13 @@ struct TestTimerView: Tests {
    let durations = assert.map(\.1)
 
    #if os(macOS)
-   Measure("Duration.formatted()", iterations: 111) {
+   Measure("Duration.formatted()", iterations: pressure * 111) {
     for duration in durations {
      blackHole(duration.formatted())
     }
    }
    #endif
-   Measure("Duration.timerView", iterations: 111) {
+   Measure("Duration.timerView", iterations: pressure * 111) {
     for duration in durations {
      blackHole(duration.timerView)
     }
@@ -57,6 +59,7 @@ struct TestTimerView: Tests {
 }
 
 struct TestLossLessStringDuration: Tests {
+ var pressure: Size = 2
  let assert: KeyValuePairs<String, Duration> = [
   "1nanosecond": .nanoseconds(1),
   "1microsecond": .microseconds(1),
@@ -78,7 +81,7 @@ struct TestLossLessStringDuration: Tests {
    }
    Benchmarks {
     let labels = assert.map(\.0)
-    Measure("Initialize Duration", iterations: 111) {
+    Measure("Initialize Duration", iterations: pressure * 444) {
      for label in labels {
       try blackHole(Duration(label).throwing())
      }
@@ -89,8 +92,9 @@ struct TestLossLessStringDuration: Tests {
 }
 
 struct TestDurationExtensions: Tests {
+ var pressure: Size = 2
  var tests: some Testable {
-  TestTimerView()
-  TestLossLessStringDuration()
+  TestTimerView(pressure: pressure)
+  TestLossLessStringDuration(pressure: pressure)
  }
 }

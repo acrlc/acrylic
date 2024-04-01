@@ -1,42 +1,68 @@
+import os
+
 public protocol Module: Identifiable {
  associatedtype VoidFunction: Module
  @Modular
  var void: VoidFunction { get }
 }
 
-extension Module {
+public extension Module {
  @_disfavoredOverload
  @inlinable
  @discardableResult
- public func callAsFunction() async throws -> Sendable {
+ func callAsFunction() async throws -> Sendable {
+  var detached = [Task<Sendable, Error>]()
+
   if let function = self as? any AsyncFunction {
-   try await function.callAsyncFunction()
+   if function.detached {
+    detached.append(
+     Task.detached(priority: function.priority) {
+      try await function.callAsyncFunction()
+     }
+    )
+   } else {
+    return try await function.callAsyncFunction()
+   }
   } else if let function = self as? any Function {
-   try await function.callAsFunction()
+   if function.detached {
+    detached.append(
+     Task.detached(priority: function.priority) {
+      try await function.callAsFunction()
+     }
+    )
+   } else {
+    return try await function.callAsFunction()
+   }
   } else {
    if avoid {
-    try await (self as? Modules)?.callAsFunction()
+    return try await (self as? Modules)?.callAsFunction()
    } else {
-    try await void.callAsFunction()
+    return try await void.callAsFunction()
    }
   }
+
+  for task in detached {
+   try await task.wait()
+  }
+  return ()
  }
 
  @_spi(ModuleReflection)
  @_disfavoredOverload
  @inlinable
- public mutating func mutatingCallWithContext(
+ mutating func mutatingCallWithContext(
   id: AnyHashable? =
    nil
  ) async throws {
   let id = id ?? AnyHashable(id)
   let shouldUpdate = Reflection.cacheIfNeeded(self, id: id)
   let index = Reflection.states[id].unsafelyUnwrapped.indices[0][0]
-  let context = index.value._context(from: index).unsafelyUnwrapped
+  let context = ModuleContext.cache.withLockUnchecked { $0[index.key] }
+   .unsafelyUnwrapped
 
   if shouldUpdate {
-   context.update()
-   try await context.updateTask?.value
+   try await context.update()
+   try await context.updateTask?.wait()
   }
 
   try await context.callTasks()
@@ -46,14 +72,15 @@ extension Module {
  @_spi(ModuleReflection)
  @_disfavoredOverload
  @inlinable
- public func callWithContext(id: AnyHashable? = nil) async throws {
+ func callWithContext(id: AnyHashable? = nil) async throws {
   let id = id ?? AnyHashable(id)
   let shouldUpdate = Reflection.cacheIfNeeded(self, id: id)
   let index = Reflection.states[id].unsafelyUnwrapped.indices[0][0]
-  let context = index.value._context(from: index).unsafelyUnwrapped
+  let context = ModuleContext.cache.withLockUnchecked { $0[index.key] }
+   .unsafelyUnwrapped
 
   if shouldUpdate {
-   context.update()
+   context.state.update(context)
    try await context.updateTask?.value
   }
 
@@ -61,17 +88,27 @@ extension Module {
  }
 
  @usableFromInline
- static var _mangledName: String {
+ internal static var _mangledName: String {
   Swift._mangledTypeName(Self.self) ?? String(describing: Self.self)
  }
 
  @usableFromInline
- static var _typeName: String {
+ internal var _mangledName: String {
+  Swift._mangledTypeName(Self.self) ?? String(describing: Self.self)
+ }
+
+ @usableFromInline
+ internal var _typeName: String {
   Swift._typeName(Self.self)
  }
 
+ @usableFromInline
+ internal var _objectID: ObjectIdentifier {
+  ObjectIdentifier(Self.self)
+ }
+
  @_spi(ModuleReflection)
- public var _type: ModuleType {
+ var _type: ModuleType {
   self is any AsyncFunction
    ? .asyncFunction
    : self is any Function ? .function : .module
@@ -93,12 +130,6 @@ public struct EmptyModule: Module, ExpressibleAsEmpty {
  public static var empty = Self()
  public var isEmpty: Bool { true }
  public init() {}
-}
-
-public extension Module {
- typealias Empty = EmptyModule
- @_transparent
- var empty: Empty { .empty }
 }
 
 @_spi(ModuleReflection)
@@ -123,15 +154,17 @@ extension Optional: Module where Wrapped: Module {
  public var void: some Module {
   if let self {
    self
-  } else {
-   empty
   }
  }
 }
 
 extension Module {
  @inlinable
- var avoid: Bool { VoidFunction.self is Never.Type }
+ var avoid: Bool {
+  VoidFunction.self is EmptyModule.Type ||
+   VoidFunction.self is Never.Type
+ }
+
  @inlinable
  public var hasVoid: Bool { !avoid }
 }

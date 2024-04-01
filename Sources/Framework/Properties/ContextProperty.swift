@@ -51,8 +51,11 @@ public extension ContextualProperty {
  func move(from previous: ModuleContext, to context: ModuleContext) {
   assert(previous != context)
   if previous != context {
-   if context.values[id] != nil {
-    previous.values.removeValue(forKey: id)
+   context.values.withLockUnchecked { values in
+    let id = self.id
+    if values[id] != nil {
+     _ = previous.values.withLockUnchecked { $0.removeValue(forKey: id) }
+    }
    }
   }
  }
@@ -73,9 +76,11 @@ ContextProperty<Value: Sendable>: @unchecked Sendable, ContextualProperty {
  public mutating func initialize() {
   if let initialValue {
    let id = id
-   if context.values.keys.contains(id) {
-    context.values[id] = initialValue
-    self.initialValue = nil
+   context.values.withLockUnchecked { values in
+    if values.keys.contains(id) {
+     values[id] = initialValue
+     self.initialValue = nil
+    }
    }
   }
  }
@@ -83,10 +88,12 @@ ContextProperty<Value: Sendable>: @unchecked Sendable, ContextualProperty {
  @inlinable
  public mutating func initialize(with context: ModuleContext) {
   if let initialValue {
-   let id = id
-   if context.values.keys.contains(id) {
-    context.values[id] = initialValue
-    self.initialValue = nil
+   context.values.withLockUnchecked { values in
+    let id = id
+    if values.keys.contains(id) {
+     values[id] = initialValue
+     self.initialValue = nil
+    }
    }
   }
   self.context = context
@@ -95,20 +102,24 @@ ContextProperty<Value: Sendable>: @unchecked Sendable, ContextualProperty {
  @inlinable
  public var wrappedValue: Value {
   get {
-   if let value = context.values[id] as? Value {
-    return value
-   } else
-   if let optional = context.values[id] as? Value?, let value = optional {
-    return value
-   } else {
-    precondition(
-     initialValue != nil,
-     "set \(Self.self) within an initializer or on the property"
-    )
-    return initialValue.unsafelyUnwrapped
+   context.values.withLockUnchecked {
+    if let value = $0[id] as? Value {
+     return value
+    } else
+    if let optional = $0[id] as? Value?, let value = optional {
+     return value
+    } else {
+     precondition(
+      initialValue != nil,
+      "set \(Self.self) within an initializer or on the property"
+     )
+     return initialValue.unsafelyUnwrapped
+    }
    }
   }
-  nonmutating set { context.values[self.id] = newValue }
+  nonmutating set {
+   context.values.withLockUnchecked { $0[self.id] = newValue }
+  }
  }
 
  public init() {}
@@ -162,7 +173,6 @@ public extension ContextProperty {
    "cannot called shared context, states must be initialized before handling"
   )
   wrappedValue = newValue()
-  // FIXME: crashes when context is not connected to a module
   context.callAsFunction()
  }
 }

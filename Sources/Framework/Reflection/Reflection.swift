@@ -49,7 +49,6 @@ extension Reflection {
    let index = initialState.indices[0][0]
 
    index.step(initialState.recurse)
-   initialState.start = nil
 
    return initialState
   }
@@ -79,16 +78,16 @@ extension Reflection {
    let index = initialState.indices[0][0]
 
    index.step(initialState.recurse)
-   initialState.start = nil
 
-   let module = index.value
-
-   module._context(from: index).unsafelyUnwrapped.callAsFunction()
+   ModuleContext.cache.withLockUnchecked { $0[index.key] }
+    .unsafelyUnwrapped
+    .callAsFunction()
   } else {
    let index = states[A._mangledName].unsafelyUnwrapped.indices[0][0]
-   let module = index.value
 
-   let context = module._context(from: index).unsafelyUnwrapped
+   let context =
+    ModuleContext.cache.withLockUnchecked { $0[index.key] }
+     .unsafelyUnwrapped
 
    if context.calledTask != nil {
     context.callAsFunction()
@@ -130,7 +129,6 @@ extension Reflection {
    let index = initialState.indices[0][0]
 
    index.step(initialState.recurse)
-   initialState.start = nil
 
    return false
   }
@@ -165,17 +163,16 @@ extension Reflection {
    let index = initialState.indices[0][0]
 
    index.step(initialState.recurse)
-   initialState.start = nil
 
-   let module = index.value
+   ModuleContext.cache.withLockUnchecked { $0[index.key] }.unsafelyUnwrapped
+    .callAsFunction()
 
-   module._context(from: index).unsafelyUnwrapped.callAsFunction()
    return withUnsafeMutablePointer(to: &index.value) { $0 }
   } else {
    let index = states[id].unsafelyUnwrapped.indices[0][0]
-   let module = index.value
 
-   let context = module._context(from: index).unsafelyUnwrapped
+   let context =
+    ModuleContext.cache.withLockUnchecked { $0[index.key] }.unsafelyUnwrapped
 
    context.callAsFunction()
    return withUnsafeMutablePointer(to: &index.value) { $0 }

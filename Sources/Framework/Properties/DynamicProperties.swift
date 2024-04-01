@@ -117,8 +117,7 @@ public extension _StaticModuleAliasProperty {
 
  @usableFromInline
  internal unowned static var context: ModuleContext {
-  ModuleContext.cache.withLockUnchecked { $0[index.hashValue] }
-   .unsafelyUnwrapped
+  ModuleContext.cache.withLockUnchecked { $0[index.key] }!
  }
 
  init(
@@ -201,8 +200,7 @@ public extension _ObservedModuleAliasProperty {
 
  @usableFromInline
  internal unowned static var context: ModuleContext {
-  let module = index.value
-  return module._context(from: index).unsafelyUnwrapped
+  ModuleContext.cache.withLockUnchecked { $0[index.key] }!
  }
 
  init(

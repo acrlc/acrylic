@@ -91,8 +91,11 @@ public struct AsyncTask
 
  /// Removes the task form the operator without cancelling
  public func remove(with context: ModuleContext) {
-  let id = id
   context.tasks.running[id] = nil
+
+  if !context.tasks.isRunning {
+   context.tasks.completed = true
+  }
   // context.tasks.queue[id] = nil
  }
 
@@ -115,7 +118,10 @@ public struct AsyncTask
  @_spi(ModuleReflection)
  @inlinable
  public func callAsFunction() async throws -> Output? {
-  // defer { if let context { self.remove(with: context) } }
+  if let context {
+   remove(with: context)
+  }
+
   let task =
    detached
     ? Task<Output?, Error>.detached(
@@ -150,7 +156,9 @@ public final class Tasks: Identifiable, ExpressibleAsEmpty, Equatable {
  }
 
  public static let empty = Tasks()
- public nonisolated var isEmpty: Bool { self == Tasks.empty }
+ public nonisolated var isEmpty: Bool {
+  self.queue.isEmpty && self.running.isEmpty
+ }
 
  @usableFromInline typealias Key = AnyHashable
  public typealias DefaultTask = any AsyncOperation
@@ -158,26 +166,28 @@ public final class Tasks: Identifiable, ExpressibleAsEmpty, Equatable {
  public typealias Running = [(AnyHashable, Operational)]
 
  public var queue: Queue = .empty
-
- @_spi(ModuleReflection)
  public var running: Running = .empty
 
- @_spi(ModuleReflection)
+ @inlinable
  public var keyTasks: [Operational] { self.running.map(\.1) }
- @_spi(ModuleReflection)
  @inlinable
  public var operations: [DefaultTask] { self.queue.map(\.1) }
- public var isRunning: Bool { keyTasks.contains(where: \.isRunning) }
+
+ public var isRunning: Bool {
+  guard !completed else {
+   return false
+  }
+  return running.notEmpty || detached.notEmpty
+ }
 
  @usableFromInline
  let phase = OSAllocatedUnfairLock(uncheckedState: ())
-
- public func cancelCurrent() {}
 
  public func removeAll() {
   self.phase.withLockUnchecked {
    self.queue.removeAll()
    self.running.removeAll()
+   self.detached.removeAll()
   }
  }
 
@@ -188,73 +198,33 @@ public final class Tasks: Identifiable, ExpressibleAsEmpty, Equatable {
   }
  }
 
-// @inlinable func cancelAndWait() {
-//  for operation in self.keyTasks.reversed() {
-//   operation.cancel()
-//   operation.wait()
-//  }
-//  for operation in self.operations.reversed() {
-//   operation.cancel()
-//   operation.wait()
-//  }
-// }
-
- /// Allows tasks to finish before performing the next block
  @inlinable
- func waitForAll() {
-  repeat {
-   continue
-  } while self.isRunning
+ func wait() async throws {
+  for task in keyTasks.map({ $0 as! Task<Sendable, Error> }) {
+   try await task.wait()
+  }
  }
 
-// @inlinable func wait() {
-//  repeat { continue }
-//  while operations.contains(where: { $0.isRunning && !$0.detached })
-// }
-// @usableFromInline var task: Task<(), Error>?
-// @inlinable mutating func callAsFunction() async throws {
-//  // defer { self.removeAll() }
-//  // self.cancelCurrent()
-//  let current = self.operations
-//  self.task = Task {
-//   try await withThrowingTaskGroup(of: Void.self) { group in
-//    var operations = current
-//    var detached = [DefaultTask]()
-//
-//    while operations.notEmpty {
-//     let task = operations.removeFirst()
-//     let isDetached = task.detached
-//     if isDetached {
-//      detached.append(task)
-//     } else {
-//      if detached.notEmpty {
-//       for detachedTask in detached { group.addTask { try await detachedTask()
-//       } }
-//       detached = .empty
-//      }
-//      try await task()
-//     }
-//    }
-//
-//    if detached.notEmpty {
-//     for detachedTask in detached { group.addTask { try await detachedTask() }
-//     }
-//    }
-//   }
-//  }
-//  try await task?.value
-// }
+ @inlinable
+ func waitForAll() async throws {
+  try await self.wait()
+
+  for task in detached {
+   try await task.wait()
+  }
+ }
 
  @_spi(ModuleReflection)
  public var task: Task<[Sendable], Error>?
+ public var detached = [Task<(), Error>]()
+ public var completed: Bool = false
 
  @_spi(ModuleReflection)
  @inlinable
  @discardableResult
  public func callAsFunction() async throws -> [Sendable]? {
-  #if DEBUG
   assert(!self.isRunning)
-  #endif
+  self.completed = false
   self.cancel()
 
   let current = self.operations
@@ -262,14 +232,16 @@ public final class Tasks: Identifiable, ExpressibleAsEmpty, Equatable {
 
   self.task = Task {
    var results: [Sendable] = .empty
+
    for task in current {
     if task.detached {
-     Task { try await task() }
+     self.detached.append(Task { try await task() })
     }
     else {
      try await results.append(task())
     }
    }
+
    return results
   }
 
@@ -283,16 +255,14 @@ public extension [(AnyHashable, any Operational)] {
  subscript(_ key: AnyHashable) -> (any Operational)? {
   get { first(where: { $0.0 == key })?.1 }
   set {
-   guard let index = firstIndex(where: { $0.0 == key }) else {
-    if let newValue {
+   if let newValue {
+    if let index = firstIndex(where: { $0.0 == key }) {
+     self[index] = newValue
+    } else {
      append((key, newValue))
     }
-    return
-   }
-   if let newValue {
-    self[index] = newValue
    } else {
-    remove(at: index)
+    removeAll(where: { $0.0 == key })
    }
   }
  }
@@ -303,16 +273,14 @@ public extension [(AnyHashable, any AsyncOperation)] {
  subscript(_ key: AnyHashable) -> (any AsyncOperation)? {
   get { first(where: { $0.0 == key })?.1 }
   set {
-   guard let index = firstIndex(where: { $0.0 == key }) else {
-    if let newValue {
+   if let newValue {
+    if let index = firstIndex(where: { $0.0 == key }) {
+     self[index] = newValue
+    } else {
      append((key, newValue))
     }
-    return
-   }
-   if let newValue {
-    self[index] = newValue
    } else {
-    remove(at: index)
+    removeAll(where: { $0.0 == key })
    }
   }
  }
@@ -331,7 +299,7 @@ public extension Sendable {
 @_spi(ModuleReflection)
 public extension [Sendable] {
  var _validResults: Self {
-  self.compactMap { result in
+  compactMap { result in
    if let array = result as? Self {
     array._validResults
    } else {
@@ -351,12 +319,28 @@ public extension [Any] {
    )
   }
 
-  return self.compactMap { result in
+  return compactMap { result in
    if let array = result as? Self {
     array._validResults
    } else {
     _isValid(result) ? result : nil
    }
   }
+ }
+}
+
+extension Task {
+ @discardableResult
+ @usableFromInline
+ func wait() async throws -> Success {
+  try await value
+ }
+}
+
+extension Task where Failure == Never {
+ @discardableResult
+ @usableFromInline
+ func wait() async -> Success {
+  await value
  }
 }

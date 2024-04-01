@@ -18,8 +18,6 @@ open class ModuleState {
  @_spi(ModuleReflection)
  public var indices: Indices = .empty
  @_spi(ModuleReflection)
- public var start: Index!
- @_spi(ModuleReflection)
  public init() {}
 }
 
@@ -43,27 +41,6 @@ public extension ModuleState {
  }
 
  @inlinable
- func rebase(
-  _ index: Index, with voids: Modules,
-  _ content: (Index) throws -> Value?
- ) rethrows {
-  if voids.notEmpty {
-   if let voids = voids as? [[Value]] {
-    if voids.count == 1 {
-     // rebase void array
-     try index.rebase(voids.first!, content)
-    } else {
-     // rebase recursive array
-     try index.rebase(voids, content)
-    }
-   } else {
-    // rebase array array
-    try index.rebase(voids, content)
-   }
-  }
- }
-
- @inlinable
  @discardableResult
  internal func recurse(_ index: Index) -> Value? {
   var module: Value {
@@ -71,29 +48,20 @@ public extension ModuleState {
    set { index.value = newValue }
   }
 
-  if index != .start, let voids = module as? Modules {
-   // rebase using the start index
-   rebase(start, with: voids, recurse)
-  } else {
-   let key = module._id(from: index)
-   let context =
-    ModuleContext.cache.withLockUnchecked { $0[key] } ??
-    ModuleContext.cached(index, with: self, key: key)
+  let key = index.key
 
-   if module.hasVoid {
-    // recurse if module contains void
-    if let voids = module.void as? Modules {
-     defer { self.start = nil }
-     start = index
-     index.rebase(voids, recurse)
-    } else if module.void.notEmpty {
-     index.rebase([module.void], recurse)
-    }
-   }
-   // finalize the result, adding functions to the module context if needed
-   return module.finalize(with: index, context: context, key: key)
+  let context =
+   ModuleContext.cache.withLockUnchecked { $0[key] } ??
+   .cached(index, with: self, key: key)
+
+  if module.hasVoid {
+   let void = module.void
+   let voids = void as? Modules ?? [void]
+
+   index.rebase(voids, recurse)
   }
-  return nil
+
+  return module.finalize(with: index, context: context, key: key)
  }
 }
 
@@ -101,7 +69,7 @@ public extension ModuleState {
 extension Module {
  @usableFromInline
  var isIdentifiable: Bool {
-  !(ID.self is EmptyID.Type || ID.self is Never.Type)
+  !(ID.self is Never.Type) && !(id is EmptyID)
  }
 
  @usableFromInline
@@ -254,5 +222,26 @@ public extension ModuleState {
   indices.pointee[0][0].step(state.recurse)
 
   return state
+ }
+}
+
+public extension ModuleState.Index {
+ var typeName: String { value._typeName }
+ var mangledName: String { value._mangledName }
+ var objectID: ObjectIdentifier { value._objectID }
+ var id: String {
+  if value.isIdentifiable {
+   let description = String(describing: value.id).readableRemovingQuotes
+   if description != "nil" {
+    return "\(mangledName)[\(description)](\(hashValue))"
+   }
+  }
+  return "\(mangledName)(\(hashValue))"
+ }
+
+ var key: Int { id.hashValue }
+
+ var context: ModuleContext? {
+  ModuleContext.cache.withLockUnchecked { $0[self.key] }
  }
 }

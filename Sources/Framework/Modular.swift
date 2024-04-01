@@ -2,10 +2,10 @@
 open class Modular {
  public typealias Component = any Module
  public typealias Components = Modules
- public static func buildBlock() -> EmptyModule { EmptyModule() }
- public static func buildBlock(_ empty: ()) -> EmptyModule {
-  EmptyModule()
- }
+ // public static func buildBlock() -> EmptyModule { EmptyModule() }
+// public static func buildBlock(_ empty: ()) -> EmptyModule {
+//  EmptyModule()
+// }
 
  public static func buildBlock<Result: Sendable>(
   _ action: @autoclosure @escaping () throws -> Result

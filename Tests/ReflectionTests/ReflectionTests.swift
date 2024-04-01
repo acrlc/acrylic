@@ -8,9 +8,9 @@ final class ReflectionTests: XCTestCase {
   first.forward { index in
    print(index.start.value)
   }
-  print(state.values.map { $0._flattened.map { $0._id(from: first) } })
+  print(state.values.map { $0._flattened.map(\.id) })
 
-  let context = try XCTUnwrap(first.value._context(from: first))
+  let context = try XCTUnwrap(first.context)
 
   try await context.callTasks()
 

@@ -1,8 +1,8 @@
 @_spi(ModuleReflection) import Acrylic
+import Core
 @_exported import ModuleFunctions
 @_exported import Shell
 import struct Time.Timer
-import Core
 
 public protocol Testable: TestProtocol {
  associatedtype Testables: Module
@@ -791,19 +791,5 @@ public struct BenchmarkModules<ID: Hashable>: TestProtocol {
 public extension TestProtocol {
  typealias Benchmark<A> = Benchmarks<A> where A: Hashable
  typealias BenchmarkModule<A> = BenchmarkModules<A> where A: Hashable
-}
-#endif
-
-/* MARK: - Command Support */
-#if canImport(Command)
-import Command
-
-public typealias TestCommand = AsyncCommand & Testable
-public extension AsyncCommand where Self: Testable {
- @_disfavoredOverload
- func main() async throws {
-  do { try await callAsTest() }
-  catch { exit(Int32(error._code)) }
- }
 }
 #endif

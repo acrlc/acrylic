@@ -18,9 +18,9 @@ struct TestContext: Testable {
    let firstIndex = try state.indices[0].first.throwing()
    let index = try firstIndex.index(where: { $0 is Self }).throwing()
    let value = try (index.value as? Self).throwing()
-   let id = value._id(from: index)
+   let key = index.key
    let context = try ModuleContext.cache.withLockUnchecked { cache in
-    try cache[id].throwing()
+    try cache[key].throwing()
    }
 
    Perform.Async("Modify State & Context") {

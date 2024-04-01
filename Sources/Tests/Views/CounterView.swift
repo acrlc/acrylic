@@ -121,13 +121,14 @@ final class Counter: ObservableModule {
  func callAsFunction(_ amount: Int) {
   state { $0.count += amount }
   callContext()
-  inform()
+  print(String.newline + contextInfo.joined(separator: ", "))
  }
 }
 
-@available(macOS 13, iOS 16, *)
-extension Counter {
- func inform() {
+#endif
+
+extension Module {
+ var contextInfo: [String] {
   let cache = ModuleContext.cache.withLockUnchecked { $0 }
   let contextInfo = "contexts: " + cache.count.description.readable
   let reflectionInfo = "reflections: " +
@@ -149,14 +150,12 @@ extension Counter {
    .reduce(into: 0, +=)
    .description.readable
 
-  print(
-   String.newline + contextInfo,
+  return [
+   contextInfo,
    reflectionInfo,
    tasksInfo,
    indexInfo,
-   valuesInfo,
-   separator: .comma + .space
-  )
+   valuesInfo
+  ]
  }
 }
-#endif

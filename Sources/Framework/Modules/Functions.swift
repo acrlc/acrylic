@@ -32,9 +32,9 @@ public extension Function where Output == Never {
  }
 }
 
-public extension Function where VoidFunction == Empty {
+public extension Function where VoidFunction == EmptyModule {
  @_disfavoredOverload
- var void: Empty { Empty() }
+ var void: EmptyModule { EmptyModule() }
 }
 
 /// A module that explicitly performs an asynchronous function
@@ -70,9 +70,9 @@ public extension AsyncFunction where Output == Never {
  }
 }
 
-public extension AsyncFunction where VoidFunction == Empty {
+public extension AsyncFunction where VoidFunction == EmptyModule {
  @_disfavoredOverload
- var void: Empty { Empty() }
+ var void: EmptyModule { EmptyModule() }
 }
 
 /* TODO: incorporate with modifiers
@@ -96,17 +96,39 @@ public extension Modules {
  @inlinable
  func callAsFunction() async throws -> [Sendable] {
   var results: [Sendable] = []
+  var detached = [Task<Sendable, Error>]()
   for module in self {
    if let modules = module as? Modules {
     try await results.append(modules.callAsFunction())
    } else if let task = module as? any AsyncFunction {
-    try await results.append(task.callAsyncFunction())
+    if task.detached {
+     detached.append(
+      Task.detached(priority: task.priority) {
+       try await task.callAsyncFunction()
+      }
+     )
+    } else {
+     try await results.append(task.callAsyncFunction())
+    }
    } else if let task = module as? any Function {
-    try await results.append(task.callAsFunction())
+    if task.detached {
+     detached.append(
+      Task.detached(priority: task.priority) {
+       try await task.callAsFunction()
+      }
+     )
+    } else {
+     try await results.append(task.callAsFunction())
+    }
    } else {
     try await results.append(module.callAsFunction())
    }
   }
+
+  for task in detached {
+   try await task.wait()
+  }
+
   return results
  }
 }

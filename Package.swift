@@ -24,7 +24,8 @@ let package = Package(
   .package(url: "https://github.com/acrlc/Shell.git", branch: "main"),
   // for AcrylicTests binary
   .package(url: "https://github.com/acrlc/Configuration.git", branch: "main"),
-  .package(url: "https://github.com/acrlc/Benchmarks.git", branch: "main")
+  .package(url: "https://github.com/acrlc/Benchmarks.git", branch: "main"),
+  .package(url: "https://github.com/acrlc/Command.git", branch: "main")
  ],
  targets: [
   .target(
@@ -51,7 +52,7 @@ let package = Package(
   ),
   .executableTarget(
    name: "AcrylicTests",
-   dependencies: ["Tests", "Benchmarks", "Configuration"],
+   dependencies: ["Tests", "Benchmarks", "Configuration", "Command", "Time"],
    path: "Sources/Tests"
   ),
   .testTarget(name: "ModuleTests", dependencies: ["Acrylic"]),

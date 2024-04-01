@@ -29,7 +29,7 @@ struct TestAsyncContext: Tests {
    let firstIndex = try state.indices[0].first.throwing()
    let index = try firstIndex.index(where: { $0 is Self }).throwing()
    let value = try (index.value as? Self).throwing()
-   let id = value._id(from: index)
+   let id = index.key
    let context = try ModuleContext.cache.withLockUnchecked { cache in
     try cache[id].throwing()
    }
@@ -52,12 +52,12 @@ struct TestAsyncContext: Tests {
     await value.defect()
     try (!context.isRunning).throwing()
    }
-   
+
    // assert that the module context was updated to false
    Assert("Module Update", !value.should)
    // assert that module structure was changed
    Assert("Structure Update", value.throwError)
-   
+
    Test("Assert Context Retained w/ Results") {
     Identity {
      try await state.callAsFunction(context)
@@ -68,9 +68,8 @@ struct TestAsyncContext: Tests {
       try index.index(where: { $0.id as? String == "defect" })
        .throwing(reason: "couldn't find value with id: defect")
 
-     let id = defectiveIndex.value._id(from: defectiveIndex)
-
-     return try (results[id] as? [Bool])
+     let key = defectiveIndex.key
+     return try (results[key] as? [Bool])
       .throwing(reason: "results not returned")
     } == [true]
    }

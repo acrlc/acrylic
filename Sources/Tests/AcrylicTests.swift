@@ -10,15 +10,27 @@ import TokamakDOM
 #elseif canImport(SwiftUI)
 import SwiftUI
 #endif
+import Command
+import Time
 
-/// A test for the `Acrylic` framework
-struct AcrylicTests: Tests {
+@main /// A test for the `Acrylic` framework
+struct AcrylicTests: Tests & AsyncCommand {
  @Context
  var breakOnError = true
- #if os(WASI) || canImport(SwiftUI)
- @State
- var disabled = true
- #endif
+ @Option
+ var pressure: Size = 2
+
+ func setUp() {
+  if pressure.rawValue > 11 {
+   print()
+   notify(
+    """
+    \n\tLimited test pressure to 13, due to the non-linearity of some \
+    structures\n
+    """.applying(style: .bold), with: .warning
+   )
+  }
+ }
 
  var tests: some Testable {
   Test("Assertions / Break") {
@@ -41,10 +53,13 @@ struct AcrylicTests: Tests {
    }
   }
 
-  if #available(macOS 13, iOS 16, *) {
-   Test("Operational") {
+  Test("Operational") {
+   if #available(macOS 13, iOS 16, *) {
     TestTasks()
    }
+
+   // limit
+   TestMapAsyncDetachedTasks(limit: min(13, pressure.rawValue))
   }
 
   Test("Contextual") {
@@ -59,17 +74,29 @@ struct AcrylicTests: Tests {
 
   Test("Benchmarking / Tests") {
    Benchmark("Normal Benchmarks") {
-    Measure("Sleep 10000µs", warmup: 2, iterations: 111) { usleep(10000) }
+    // note: not sure if these warmups do anything at all
+    // plus, time is linear and many examples are recursive
+    Measure("Sleep 10000µs", warmup: 2, iterations: pressure * 33) {
+     usleep(10000)
+    }
    }
-   Benchmark.Modules("Module Benchmarks", warmup: 2, iterations: 111) {
+   Benchmark.Modules(
+    "Module Benchmarks", warmup: 2, iterations: pressure * 33
+   ) {
     Perform("Sleep 10000µs") { usleep(10000) }
    }
 
-   TestDurationExtensions()
+   TestDurationExtensions(pressure: pressure)
   }
  }
 
- func onCompletion() {
+ func onCompletion() async {
+  print()
+  notify(
+   String.newline + contextInfo.joined(separator: ",\n"),
+   for: "context",
+   with: .info
+  )
   #if os(WASI) || canImport(SwiftUI)
   // clear previous states / contexts
   Reflection.states.removeAll()
@@ -84,29 +111,19 @@ struct AcrylicTests: Tests {
    .applying(style: .bold),
    for: .note
   )
+
+  await MainActor.run { AcrylicTestsApp.main() }
   #endif
  }
 }
 
 #if os(WASI) || canImport(SwiftUI)
 @available(macOS 13, iOS 16, *)
-@main
-extension AcrylicTests: App {
+struct AcrylicTestsApp: App {
  var body: some Scene {
   Window("Count", id: "acrylic.counter") {
    CounterView()
-    .task {
-     // Run tests within the context of this application
-     do {
-      try await self.callAsTestFromContext()
-      self.disabled = false
-     }
-     catch {
-      exit(Int32(error._code))
-     }
-    }
     .frame(maxWidth: 158, maxHeight: 90)
-    .disabled(self.disabled)
   }
   .windowResizability(.contentSize)
   #if os(macOS)
@@ -114,7 +131,24 @@ extension AcrylicTests: App {
   #endif
  }
 }
-#else
-@main
-extension AcrylicTests {}
 #endif
+
+extension Size: LosslessStringConvertible {
+ public init?(_ description: String) {
+  self.init(stringValue: description)
+ }
+}
+
+public extension Size {
+ static func * (lhs: Self, rhs: Self) -> Self {
+  Self(rawValue: lhs.rawValue * rhs.rawValue)
+ }
+}
+
+public typealias TestsCommand = AsyncCommand & Tests
+public extension AsyncCommand where Self: Tests {
+ func main() async throws {
+  do { try await callAsTestFromContext() }
+  catch { exit(Int32(error._code)) }
+ }
+}
