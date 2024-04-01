@@ -115,8 +115,6 @@ public extension ModuleContext {
     }
 
     for tasks in baseElements.dropFirst().map(\.context!.tasks) {
-     assert(tasks.isEmpty)
-
      for task in tasks.detached {
       try await task.wait()
      }
