@@ -67,21 +67,21 @@ public extension ModuleContext {
 
   tasks.cancel()
   index.withLockUnchecked { baseIndex in
-   let baseElements = baseIndex.elements
+   let baseIndices = baseIndex.indices
 
-   guard baseElements.count > 1 else {
+   guard baseIndices.count > 1 else {
     return
    }
-   let elements = baseElements.dropFirst()
+   let indices = baseIndices.dropFirst()
 
-   for index in elements.reversed() {
+   for index in indices.reversed() {
     let key = index.key
     let context = index.context.unsafelyUnwrapped
     let offset = index.offset
 
     context.tasks.cancel()
     index.base.remove(at: offset)
-    index.elements.remove(at: offset)
+    index.indices.remove(at: offset)
     _ = ModuleContext.cache.withLockUnchecked { $0.removeValue(forKey: key) }
    }
   }
@@ -109,12 +109,12 @@ public extension ModuleContext {
   try await index.withLockUnchecked { baseIndex in
    let baseIndex = baseIndex
    return Task {
-    let baseElements = baseIndex.elements
-    guard baseElements.count > 1 else {
+    let baseIndices = baseIndex.indices
+    guard baseIndices.count > 1 else {
      return
     }
 
-    for tasks in baseElements.dropFirst().map(\.context!.tasks) {
+    for tasks in baseIndices.dropFirst().map(\.context!.tasks) {
      for task in tasks.detached {
       try await task.wait()
      }
@@ -168,11 +168,11 @@ public extension ModuleContext {
     self.results = .empty
     self.results![baseIndex.key] = try await self.tasks()
 
-    let baseElements = baseIndex.elements
-    guard baseElements.count > 1 else {
+    let baseIndices = baseIndex.indices
+    guard baseIndices.count > 1 else {
      return
     }
-    let elements = baseElements.dropFirst().map {
+    let elements = baseIndices.dropFirst().map {
      ($0, $0.context.unsafelyUnwrapped)
     }
 

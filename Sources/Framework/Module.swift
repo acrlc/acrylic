@@ -56,7 +56,7 @@ public extension Module {
  ) async throws {
   let id = id ?? AnyHashable(id)
   let shouldUpdate = Reflection.cacheIfNeeded(self, id: id)
-  let index = Reflection.states[id].unsafelyUnwrapped.indices[0][0]
+  let index = Reflection.states[id].unsafelyUnwrapped.indices[0]
   let context = ModuleContext.cache.withLockUnchecked { $0[index.key] }
    .unsafelyUnwrapped
 
@@ -66,7 +66,7 @@ public extension Module {
   }
 
   try await context.callTasks()
-  self = index.value as! Self
+  self = index.element as! Self
  }
 
  @_spi(ModuleReflection)
@@ -75,7 +75,7 @@ public extension Module {
  func callWithContext(id: AnyHashable? = nil) async throws {
   let id = id ?? AnyHashable(id)
   let shouldUpdate = Reflection.cacheIfNeeded(self, id: id)
-  let index = Reflection.states[id].unsafelyUnwrapped.indices[0][0]
+  let index = Reflection.states[id].unsafelyUnwrapped.indices[0]
   let context = ModuleContext.cache.withLockUnchecked { $0[index.key] }
    .unsafelyUnwrapped
 

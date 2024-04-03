@@ -4,11 +4,11 @@ import XCTest
 final class ReflectionTests: XCTestCase {
  func test() async throws {
   let state = ModuleState.initialize(with: Graph())
-  let first = state.indices[0][0]
+  let first = state.indices[0]
   first.forward { index in
-   print(index.start.value)
+   print(index.start.element)
   }
-  print(state.values.map { $0._flattened.map(\.id) })
+  print(state.values.map { $0.id })
 
   let context = try XCTUnwrap(first.context)
 

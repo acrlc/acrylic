@@ -5,12 +5,12 @@ import struct Time.Timer
 final class TestState<A: Testable>: ModuleState {
  override public init() { super.init() }
  var timer = Timer()
- var baseTest: A { values[0][0] as! A }
+ var baseTest: A { values[0] as! A }
 
- func recurse(_ index: Index) async throws -> Value? {
-  var module: Value {
-   get { index.value }
-   set { index.value = newValue }
+ func recurse(_ index: Index) async throws -> Element? {
+  var module: Element {
+   get { index.element }
+   set { index.element = newValue }
   }
 
   let key = index.key
@@ -35,25 +35,29 @@ final class TestState<A: Testable>: ModuleState {
 extension ModuleState.Index {
  @discardableResult
  /// Start indexing from the current index
- func step(_ content: (Self) async throws -> Value?) async rethrows -> Value? {
+ func step(_ content: (Self) async throws -> Element?) async rethrows
+  -> Element? {
   try await content(self)
  }
 
  /// Add base values to the current index
  func rebase(
-  _ base: Base,
-  _ content: (Self) async throws -> Value?
+  _ elements: Base,
+  _ content: (Self) async throws -> Element?
  ) async rethrows {
-  for element in base {
-   let projectedIndex = elements.endIndex
-   let projectedOffset = self.base.endIndex
-   let projection: Self = .next(with: self)
-   self.base.append(element)
+  for element in elements {
+   let projectedIndex = indices.endIndex
+   let projectedOffset = base.endIndex
+   base.append(element)
+
+   var projection: Self = .next(with: self)
+   projection.index = projectedIndex
+   projection.offset = projectedOffset
 
    if try await content(projection) != nil {
-    elements.insert(projection, at: projectedIndex)
-   } else if projectedOffset < self.base.endIndex {
-    self.base.remove(at: projectedOffset)
+    indices.insert(projection, at: projectedIndex)
+   } else if projectedOffset < base.endIndex {
+    base.remove(at: projectedOffset)
    }
   }
  }
@@ -79,13 +83,13 @@ extension Tasks {
 
   let index = context.index.withLockUnchecked { $0 }
 
-  let test = index.value
+  let test = index.element
 
   let isTest = test is any TestProtocol
 
   let name = test.typeConstructorName
   let baseName =
-   context.index.withLockUnchecked { $0.start.value }.typeConstructorName
+   context.index.withLockUnchecked { $0.start.element }.typeConstructorName
   let label: String? = if
    let test = test as? any Testable,
    let name = test.testName {
@@ -228,23 +232,23 @@ extension ModuleContext {
   try await index.withLockUnchecked { baseIndex in
    let baseIndex = baseIndex
    let task = Task {
-    let baseModule = baseIndex.value
+    let baseModule = baseIndex.element
     self.results = .empty
     self.results![baseIndex.key] =
      try await self.callTestResults(baseModule, with: state)
 
-    let baseElements = baseIndex.elements
-    guard baseElements.count > 1 else {
+    let baseIndices = baseIndex.indices
+    guard baseIndices.count > 1 else {
      return
     }
 
-    let elements = baseElements.dropFirst().map {
+    let indices = baseIndices.dropFirst().map {
      ($0, $0.context.unsafelyUnwrapped)
     }
 
-    for (index, context) in elements {
+    for (index, context) in indices {
      self.results![index.key] =
-      try await context.callTestResults(index.value, with: state)
+      try await context.callTestResults(index.element, with: state)
     }
    }
 
@@ -289,9 +293,13 @@ extension Reflection {
    let indices =
     withUnsafeMutablePointer(to: &state.indices) { $0 }
 
-   ModuleState.Index.bind(base: [module], values: values, indices: indices)
+   ModuleState.Index.bind(
+    base: [module],
+    basePointer: values,
+    indicesPointer: indices
+   )
 
-   let index = initialState.indices[0][0]
+   let index = initialState.indices[0]
 
    try await index.step(initialState.recurse)
 
@@ -355,12 +363,16 @@ extension Module {
 
 extension ModuleState.Index: CustomStringConvertible {
  public var description: String {
-  if value.isIdentifiable {
-   let description = String(describing: value.id).readableRemovingQuotes
-   if description != "nil" {
-    return "\(value.typeConstructorName)[\(description)](\(index), \(offset)) | \(range))"
+  if element.isIdentifiable {
+   let desc = String(describing: element.id).readableRemovingQuotes
+   if desc != "nil" {
+    return
+     """
+     \(element.typeConstructorName)\
+     [\(desc)](\(index), \(offset)) | \(range ?? 0 ..< 0)
+     """
    }
   }
-  return "\(value.typeConstructorName)(\(index), \(offset) | \(range))"
+  return "\(element.typeConstructorName)(\(index), \(offset) | \(range ?? 0 ..< 0))"
  }
 }

@@ -9,8 +9,8 @@ typealias ModuleIndex = UnsafeRecursiveNode<Modules>
 open class ModuleState {
  public typealias Base = Modules
  public typealias Index = UnsafeRecursiveNode<Modules>
- public typealias Value = Index.Value
- public typealias Values = Index.Values
+ public typealias Element = Index.Element
+ public typealias Values = Index.Base
  public typealias Indices = Index.Indices
  static let unknown = ModuleState()
  @_spi(ModuleReflection)
@@ -42,10 +42,10 @@ public extension ModuleState {
 
  @inlinable
  @discardableResult
- internal func recurse(_ index: Index) -> Value? {
-  var module: Value {
-   get { index.value }
-   set { index.value = newValue }
+ internal func recurse(_ index: Index) -> Element? {
+  var module: Element {
+   get { index.element }
+   set { index.element = newValue }
   }
 
   let key = index.key
@@ -193,9 +193,9 @@ public extension ModuleContext {
   _ index: ModuleState.Index, with state: ModuleState, key: AnyHashable
  ) -> ModuleContext {
   ModuleContext.cache.withLockUnchecked {
-   $0[key] = index.value.context(from: index, state: state)
+   $0[key] = index.element.context(from: index, state: state)
    let context = $0[key].unsafelyUnwrapped
-   index.value.assign(to: context)
+   index.element.assign(to: context)
    return context
   }
  }
@@ -215,25 +215,26 @@ public extension ModuleState {
   let indices = withUnsafeMutablePointer(to: &state.indices) { $0 }
 
   ModuleIndex.bind(
-   base: [module], values: &values.pointee,
-   indices: &indices.pointee
+   base: [module],
+   basePointer: &values.pointee,
+   indicesPointer: &indices.pointee
   )
 
-  indices.pointee[0][0].step(state.recurse)
+  indices.pointee[0].step(state.recurse)
 
   return state
  }
 }
 
 public extension ModuleState.Index {
- var typeName: String { value._typeName }
- var mangledName: String { value._mangledName }
- var objectID: ObjectIdentifier { value._objectID }
+ var typeName: String { element._typeName }
+ var mangledName: String { element._mangledName }
+ var objectID: ObjectIdentifier { element._objectID }
  var id: String {
-  if value.isIdentifiable {
-   let description = String(describing: value.id).readableRemovingQuotes
-   if description != "nil" {
-    return "\(mangledName)[\(description)](\(hashValue))"
+  if element.isIdentifiable {
+   let desc = String(describing: element.id).readableRemovingQuotes
+   if desc != "nil" {
+    return "\(mangledName)[\(desc)](\(hashValue))"
    }
   }
   return "\(mangledName)(\(hashValue))"

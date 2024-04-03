@@ -140,13 +140,13 @@ extension Module {
    .reduce(into: 0, +=).description.readable
   let indexInfo = "indices: " +
    Reflection.states.values
-   .map { $0.indices.map(\.count).reduce(into: 0, +=) }
+   .map { $0.indices.count }
    .reduce(into: 0, +=)
    .description.readable
 
   let valuesInfo = "values: " +
    Reflection.states.values
-   .map { $0.values.map(\.count).reduce(into: 0, +=) }
+   .map { $0.values.count }
    .reduce(into: 0, +=)
    .description.readable
 

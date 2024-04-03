@@ -113,7 +113,7 @@ public extension _StaticModuleAliasProperty {
  }
 
  @usableFromInline
- internal static var index: ModuleIndex { state.indices[0][0] }
+ internal static var index: ModuleIndex { state.indices[0] }
 
  @usableFromInline
  internal unowned static var context: ModuleContext {
@@ -196,7 +196,7 @@ public extension _ObservedModuleAliasProperty {
  }
 
  @usableFromInline
- internal static var index: ModuleIndex { state.indices[0][0] }
+ internal static var index: ModuleIndex { state.indices[0] }
 
  @usableFromInline
  internal unowned static var context: ModuleContext {

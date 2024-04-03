@@ -26,9 +26,8 @@ struct TestAsyncContext: Tests {
  var tests: some Testable {
   get throws {
    let state = ModuleState.initialize(with: Self())
-   let firstIndex = try state.indices[0].first.throwing()
-   let index = try firstIndex.index(where: { $0 is Self }).throwing()
-   let value = try (index.value as? Self).throwing()
+   let index = try state.indices.first.throwing()
+   let value = try (index.element as? Self).throwing()
    let id = index.key
    let context = try ModuleContext.cache.withLockUnchecked { cache in
     try cache[id].throwing()

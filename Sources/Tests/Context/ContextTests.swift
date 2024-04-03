@@ -15,9 +15,8 @@ struct TestContext: Testable {
  var tests: some Testable {
   get throws {
    let state = ModuleState.initialize(with: Self())
-   let firstIndex = try state.indices[0].first.throwing()
-   let index = try firstIndex.index(where: { $0 is Self }).throwing()
-   let value = try (index.value as? Self).throwing()
+   let index = try state.indices.first.throwing()
+   let value = try (index.element as? Self).throwing()
    let key = index.key
    let context = try ModuleContext.cache.withLockUnchecked { cache in
     try cache[key].throwing()
@@ -30,8 +29,6 @@ struct TestContext: Testable {
    }
 
    Test("Check Context & Structure") {
-    let index = try firstIndex.index(where: { $0 is Self }).throwing()
-
     Assert {
      let next = try index.first(where: { $0 is Echo }).throwing()
      // find the first string value of Echo
@@ -52,7 +49,8 @@ struct TestContext: Testable {
     Assert("Modified Echo") {
      var next = try index.first(where: { $0 is Echo }).throwing()
      // find the first string value of Echo
-     let previousStr = try ((next as? Echo)?.items.first as? String).throwing()
+     let previousStr = try ((next as? Echo)?.items.first as? String)
+      .throwing()
 
      value.should = false
 

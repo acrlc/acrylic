@@ -10,7 +10,7 @@ extension StaticModule {
  }
 
  @usableFromInline
- static var index: ModuleIndex { state.indices[0][0] }
+ static var index: ModuleIndex { state.indices[0] }
 }
 
 public extension StaticModule {

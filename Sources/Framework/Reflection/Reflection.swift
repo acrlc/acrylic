@@ -44,9 +44,9 @@ extension Reflection {
    let indices =
     withUnsafeMutablePointer(to: &state.indices) { $0 }
 
-   ModuleIndex.bind(base: [A.shared], values: values, indices: indices)
+   ModuleIndex.bind(base: [A.shared], basePointer: values, indicesPointer: indices)
 
-   let index = initialState.indices[0][0]
+   let index = initialState.indices[0]
 
    index.step(initialState.recurse)
 
@@ -73,9 +73,9 @@ extension Reflection {
    let indices =
     withUnsafeMutablePointer(to: &state.indices) { $0 }
 
-   ModuleIndex.bind(base: [A.shared], values: values, indices: indices)
+   ModuleIndex.bind(base: [A.shared], basePointer: values, indicesPointer: indices)
 
-   let index = initialState.indices[0][0]
+   let index = initialState.indices[0]
 
    index.step(initialState.recurse)
 
@@ -83,7 +83,7 @@ extension Reflection {
     .unsafelyUnwrapped
     .callAsFunction()
   } else {
-   let index = states[A._mangledName].unsafelyUnwrapped.indices[0][0]
+   let index = states[A._mangledName].unsafelyUnwrapped.indices[0]
 
    let context =
     ModuleContext.cache.withLockUnchecked { $0[index.key] }
@@ -124,9 +124,9 @@ extension Reflection {
    let indices =
     withUnsafeMutablePointer(to: &state.indices) { $0 }
 
-   ModuleIndex.bind(base: [module], values: values, indices: indices)
+   ModuleIndex.bind(base: [module], basePointer: values, indicesPointer: indices)
 
-   let index = initialState.indices[0][0]
+   let index = initialState.indices[0]
 
    index.step(initialState.recurse)
 
@@ -158,24 +158,24 @@ extension Reflection {
    let indices =
     withUnsafeMutablePointer(to: &state.indices) { $0 }
 
-   ModuleIndex.bind(base: [module], values: values, indices: indices)
+   ModuleIndex.bind(base: [module], basePointer: values, indicesPointer: indices)
 
-   let index = initialState.indices[0][0]
+   let index = initialState.indices[0]
 
    index.step(initialState.recurse)
 
    ModuleContext.cache.withLockUnchecked { $0[index.key] }.unsafelyUnwrapped
     .callAsFunction()
 
-   return withUnsafeMutablePointer(to: &index.value) { $0 }
+   return withUnsafeMutablePointer(to: &index.element) { $0 }
   } else {
-   let index = states[id].unsafelyUnwrapped.indices[0][0]
+   let index = states[id].unsafelyUnwrapped.indices[0]
 
    let context =
     ModuleContext.cache.withLockUnchecked { $0[index.key] }.unsafelyUnwrapped
 
    context.callAsFunction()
-   return withUnsafeMutablePointer(to: &index.value) { $0 }
+   return withUnsafeMutablePointer(to: &index.element) { $0 }
   }
  }
 }
