@@ -234,7 +234,7 @@ extension ModuleContext {
    let task = Task {
     let baseModule = baseIndex.element
     self.results = .empty
-    self.results![baseIndex.key] =
+    self.results?[baseIndex.key] =
      try await self.callTestResults(baseModule, with: state)
 
     let baseIndices = baseIndex.indices
@@ -247,7 +247,7 @@ extension ModuleContext {
     }
 
     for (index, context) in indices {
-     self.results![index.key] =
+     self.results?[index.key] =
       try await context.callTestResults(index.element, with: state)
     }
    }

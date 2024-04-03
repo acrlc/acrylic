@@ -166,7 +166,7 @@ public extension ModuleContext {
 
    let task = Task {
     self.results = .empty
-    self.results![baseIndex.key] = try await self.tasks()
+    self.results?[baseIndex.key] = try await self.tasks()
 
     let baseIndices = baseIndex.indices
     guard baseIndices.count > 1 else {
@@ -177,7 +177,7 @@ public extension ModuleContext {
     }
 
     for (index, context) in elements {
-     self.results![index.key] = try await context.tasks()
+     self.results?[index.key] = try await context.tasks()
     }
    }
 
