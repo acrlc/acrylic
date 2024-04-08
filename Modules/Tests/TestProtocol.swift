@@ -8,7 +8,7 @@ public protocol TestProtocol: Module {
  var startMessage: String { get }
  var endMessage: String { get }
  var testName: String? { get }
-
+ var silent: Bool { get set }
  /// Performs before a test starts
  func setUp() async throws
  /// Performs when a test is finished
@@ -29,11 +29,13 @@ public extension TestProtocol {
  func onCompletion() async throws {}
  @_disfavoredOverload
  var testName: String? { idString }
-
  @_disfavoredOverload
  var resolvedName: String {
   testName?.wrapped ?? typeConstructorName
  }
+ @_disfavoredOverload
+ @inlinable
+ var silent: Bool { get { false } set {} }
 
  @_disfavoredOverload
  var breakOnError: Bool { false }

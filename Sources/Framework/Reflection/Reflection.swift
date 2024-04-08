@@ -24,8 +24,7 @@ extension Reflection {
  @usableFromInline
  @discardableResult
  static func cacheIfNeeded<A: StaticModule>(
-  _ moduleType: A
-   .Type
+  _ moduleType: A.Type
  ) -> ModuleState {
   guard let state = states[A._mangledName] else {
    let initialState = ModuleState()
@@ -44,7 +43,11 @@ extension Reflection {
    let indices =
     withUnsafeMutablePointer(to: &state.indices) { $0 }
 
-   ModuleIndex.bind(base: [A.shared], basePointer: values, indicesPointer: indices)
+   ModuleIndex.bind(
+    base: [A.shared],
+    basePointer: values,
+    indicesPointer: indices
+   )
 
    let index = initialState.indices[0]
 
@@ -73,7 +76,11 @@ extension Reflection {
    let indices =
     withUnsafeMutablePointer(to: &state.indices) { $0 }
 
-   ModuleIndex.bind(base: [A.shared], basePointer: values, indicesPointer: indices)
+   ModuleIndex.bind(
+    base: [A.shared],
+    basePointer: values,
+    indicesPointer: indices
+   )
 
    let index = initialState.indices[0]
 
@@ -103,11 +110,10 @@ extension Reflection {
    Reflection.cacheIfNeeded(A.self)
   }
  }
-
- /// Enables repeated calls from a base module using an id to retain state
+ 
  @usableFromInline
  @discardableResult
- static func cacheIfNeeded(_ module: some Module, id: AnyHashable) -> Bool {
+ static func cacheIfNeeded(_ module: some Module, id: AnyHashable) -> ModuleState {
   if states[id] == nil {
    let initialState = ModuleState()
    unowned var state: ModuleState {
@@ -116,24 +122,29 @@ extension Reflection {
      states[id] = newValue
     }
    }
-
+   
    state = initialState
-
+   
    let values =
-    withUnsafeMutablePointer(to: &state.values) { $0 }
+   withUnsafeMutablePointer(to: &state.values) { $0 }
    let indices =
-    withUnsafeMutablePointer(to: &state.indices) { $0 }
-
-   ModuleIndex.bind(base: [module], basePointer: values, indicesPointer: indices)
-
+   withUnsafeMutablePointer(to: &state.indices) { $0 }
+   
+   ModuleIndex.bind(
+    base: [module],
+    basePointer: values,
+    indicesPointer: indices
+   )
+   
    let index = initialState.indices[0]
-
+   
    index.step(initialState.recurse)
-
-   return false
+   
+   return initialState
   }
-  return true
+  return states[id].unsafelyUnwrapped
  }
+
 
  /// Enables repeated calls from a base module using an id to retain state
  @discardableResult
@@ -158,7 +169,11 @@ extension Reflection {
    let indices =
     withUnsafeMutablePointer(to: &state.indices) { $0 }
 
-   ModuleIndex.bind(base: [module], basePointer: values, indicesPointer: indices)
+   ModuleIndex.bind(
+    base: [module],
+    basePointer: values,
+    indicesPointer: indices
+   )
 
    let index = initialState.indices[0]
 
@@ -178,4 +193,14 @@ extension Reflection {
    return withUnsafeMutablePointer(to: &index.element) { $0 }
   }
  }
+  
+ @inlinable
+ static func cacheOrCall(_ module: some Module, id: AnyHashable, call: Bool) {
+  if call {
+   Reflection.call(module, id: id)
+  } else {
+   Reflection.cacheIfNeeded(module, id: id)
+  }
+ }
+
 }

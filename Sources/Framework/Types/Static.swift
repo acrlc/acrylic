@@ -44,7 +44,7 @@ public extension StaticModule {
 #if canImport(Combine)
 import Combine
 
-extension StaticModule {
+public extension StaticModule {
  @inlinable
  var contextWillChange: ModuleContext.ObjectWillChangePublisher {
   Self.context.objectWillChange

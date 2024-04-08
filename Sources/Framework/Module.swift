@@ -50,12 +50,14 @@ public extension Module {
  @_spi(ModuleReflection)
  @_disfavoredOverload
  @inlinable
- mutating func mutatingCallWithContext(
-  id: AnyHashable? =
-   nil
- ) async throws {
+ mutating func mutatingCallWithContext(id: AnyHashable? = nil) async throws {
   let id = id ?? AnyHashable(id)
-  let shouldUpdate = Reflection.cacheIfNeeded(self, id: id)
+  let shouldUpdate = Reflection.states[id] != nil
+
+  if !shouldUpdate {
+   Reflection.cacheIfNeeded(self, id: id)
+  }
+
   let index = Reflection.states[id].unsafelyUnwrapped.indices[0]
   let context = ModuleContext.cache.withLockUnchecked { $0[index.key] }
    .unsafelyUnwrapped
@@ -74,7 +76,12 @@ public extension Module {
  @inlinable
  func callWithContext(id: AnyHashable? = nil) async throws {
   let id = id ?? AnyHashable(id)
-  let shouldUpdate = Reflection.cacheIfNeeded(self, id: id)
+  let shouldUpdate = Reflection.states[id] != nil
+
+  if !shouldUpdate {
+   Reflection.cacheIfNeeded(self, id: id)
+  }
+
   let index = Reflection.states[id].unsafelyUnwrapped.indices[0]
   let context = ModuleContext.cache.withLockUnchecked { $0[index.key] }
    .unsafelyUnwrapped

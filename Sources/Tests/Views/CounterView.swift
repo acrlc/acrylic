@@ -101,12 +101,10 @@ final class Counter: ObservableModule {
  var delay: Double = .zero
  var void: some Module {
   if delay > .zero {
-   Perform.Async(detached: true) {
-    notify("sleeping for \(self.delay) seconds …", for: .note)
-   }
-
-   Sleep.Async(for: .seconds(delay))
+   notify("sleeping for \(delay) seconds …", for: .note)
   }
+
+  Sleep.Async(for: .seconds(delay))
 
   switch count {
   case .zero: Print(0)
@@ -140,13 +138,13 @@ extension Module {
    .reduce(into: 0, +=).description.readable
   let indexInfo = "indices: " +
    Reflection.states.values
-   .map { $0.indices.count }
+   .map(\.indices.count)
    .reduce(into: 0, +=)
    .description.readable
 
   let valuesInfo = "values: " +
    Reflection.states.values
-   .map { $0.values.count }
+   .map(\.values.count)
    .reduce(into: 0, +=)
    .description.readable
 

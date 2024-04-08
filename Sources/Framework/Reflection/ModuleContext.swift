@@ -29,7 +29,7 @@ public final class ModuleContext: Identifiable, Equatable, Operational {
 
  /// Results returned from calling `tasks`
  @_spi(ModuleReflection)
- public var results: [AnyHashable: Sendable]?
+ public var results: [AnyHashable: Sendable] = .empty
 
  @_spi(ModuleReflection)
  public lazy var properties: DynamicProperties? = nil
@@ -100,7 +100,6 @@ public extension ModuleContext {
  @inlinable
  func waitForAll() async throws {
   try await wait()
-  assert(tasks.isEmpty)
 
   for task in tasks.detached {
    try await task.wait()
@@ -162,11 +161,12 @@ public extension ModuleContext {
   assert(!(calledTask?.isRunning ?? false))
   #endif
   try await index.withLockUnchecked { baseIndex in
-   let baseIndex = baseIndex
+   self.results = .empty
 
+   let baseIndex = baseIndex
    let task = Task {
     self.results = .empty
-    self.results?[baseIndex.key] = try await self.tasks()
+    self.results[baseIndex.key] = try await self.tasks()
 
     let baseIndices = baseIndex.indices
     guard baseIndices.count > 1 else {
@@ -177,7 +177,7 @@ public extension ModuleContext {
     }
 
     for (index, context) in elements {
-     self.results?[index.key] = try await context.tasks()
+     self.results[index.key] = try await context.tasks()
     }
    }
 

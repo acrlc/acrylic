@@ -18,6 +18,7 @@ public extension ModularFunctions {
   public let items: [Any]
   public let separator: String
   public let terminator: String
+  public var detached: Bool = true
   public
   init(_ items: Any..., separator: String = " ", terminator: String = "\n") {
    self.items = items
@@ -34,6 +35,8 @@ public extension ModularFunctions {
   public let items: [Any]
   public let separator: String
   public let terminator: String
+  public var detached: Bool = true
+
   public
   init(_ items: Any..., separator: String = " ", terminator: String = "\n") {
    self.items = items
@@ -129,6 +132,7 @@ public extension ModularFunctions {
   public let style: Chalk.Style?
   public let separator: String
   public let terminator: String
+  public var detached: Bool = true
   public
   init(
    _ items: Any...,

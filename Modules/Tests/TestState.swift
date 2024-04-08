@@ -83,36 +83,30 @@ extension Tasks {
 
   let index = context.index.withLockUnchecked { $0 }
 
-  let test = index.element
-
-  let isTest = test is any TestProtocol
-
-  let name = test.typeConstructorName
+  let module = index.element
+  let isTest = module is any TestProtocol
+  lazy var test = (module as! any TestProtocol)
+  let name = module.typeConstructorName
   let baseName =
    context.index.withLockUnchecked { $0.start.element }.typeConstructorName
-  let label: String? = if
-   let test = test as? any Testable,
-   let name = test.testName {
+  let label: String? = if isTest, let name = test.testName {
    name
   } else {
-   test.idString
+   module.idString
   }
 
   if !index.isStart {
    if isTest {
-    try await (test as! any TestProtocol).setUp()
-    if let label {
-     print(
-      "\n[ \(label, style: .bold) ]",
-      "\("starting", color: .cyan)",
-      "\(name, color: .cyan, style: .bold)",
-      "❖"
-     )
-    } else {
-     print(
-      "\n[ \(name, color: .cyan, style: .bold) ]", "\("starting", style: .dim)",
-      "❖"
-     )
+    try await test.setUp()
+    if !test.silent {
+     if let label {
+      print(
+       "\n[ \(label, style: .bold) ]",
+       "\("starting", color: .cyan)",
+       "\(name, color: .cyan, style: .bold)",
+       "❖"
+      )
+     }
     }
    }
   }
@@ -173,10 +167,10 @@ extension Tasks {
     )
    } else {
     print(
-     test.idString == nil
+     module.idString == nil
       ? .empty
       : String.arrow.applying(color: .cyan, style: .boldDim) + .space +
-      "\(test.idString!, color: .cyan, style: .bold)"
+      "\(module.idString!, color: .cyan, style: .bold)"
     )
    }
 
@@ -201,8 +195,8 @@ extension Tasks {
    print(endMessage)
 
    if isTest {
-    try await (test as! any TestProtocol).onCompletion()
-    try await (test as! any TestProtocol).cleanUp()
+    try await test.onCompletion()
+    try await test.cleanUp()
    }
 
    return results
@@ -215,9 +209,9 @@ extension Tasks {
    print(endMessage + .newline)
 
    if
-    (test as? any TestProtocol)?.testMode ?? state.baseTest.testMode == .break {
+    (isTest && test.testMode == .break) || state.baseTest.testMode == .break {
     if isTest {
-     try await (test as! any TestProtocol).cleanUp()
+     try await test.cleanUp()
     }
 
     throw TestsError(message: message)
@@ -230,11 +224,12 @@ extension Tasks {
 extension ModuleContext {
  func callTests(with state: TestState<some Testable>) async throws {
   try await index.withLockUnchecked { baseIndex in
+   self.results = .empty
+
    let baseIndex = baseIndex
    let task = Task {
     let baseModule = baseIndex.element
-    self.results = .empty
-    self.results?[baseIndex.key] =
+    self.results[baseIndex.key] =
      try await self.callTestResults(baseModule, with: state)
 
     let baseIndices = baseIndex.indices
@@ -247,7 +242,7 @@ extension ModuleContext {
     }
 
     for (index, context) in indices {
-     self.results?[index.key] =
+     self.results[index.key] =
       try await context.callTestResults(index.element, with: state)
     }
    }
@@ -262,7 +257,9 @@ extension ModuleContext {
   _ value: any Module, with state: TestState<some Testable>
  ) async throws -> [Sendable]? {
   if let detachable = value as? Detachable, detachable.detached {
-   return try await tasks.callAsFunction()
+   let results = try await tasks.callAsFunction()
+   try await waitForAll()
+   return results
   }
 
   return try await tasks.callAsTest(from: self, with: state)

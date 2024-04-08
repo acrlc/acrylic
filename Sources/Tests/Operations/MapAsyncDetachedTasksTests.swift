@@ -20,7 +20,17 @@ struct TestMapAsyncDetachedTasks: Testable {
     }
    }
 
-   Identity(count)
+   Perform.Async {
+    let context = _count.context.index.withLock { index in
+     let context = index.indices.compactMap(\.context)
+      .first(where: { $0.isRunning })
+     return context
+    }
+
+    try await context?.waitForAll()
+   }
+
+   Identity(count)// == limit * (limit * limit) * (limit * limit)
   }
  }
 }

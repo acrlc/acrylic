@@ -61,7 +61,8 @@ struct TestAsyncContext: Tests {
     Identity {
      try await state.callAsFunction(context)
 
-     let results = try context.results.throwing(reason: "results are nil")
+     let results =
+      try context.results.wrapped.throwing(reason: "results are empty")
 
      let defectiveIndex =
       try index.index(where: { $0.id as? String == "defect" })

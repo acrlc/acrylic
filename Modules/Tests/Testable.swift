@@ -24,30 +24,27 @@ public extension Testable {
 public extension Testable {
  // swiftlint:disable:next function_body_length cyclomatic_complexity
  func test(_ modules: Modules, timer: inout Timer) async throws {
-  for test in modules {
-   let isTest = test is any TestProtocol
-   let name = test.typeConstructorName
-   let label: String? = if
-    let test = test as? any Testable,
-    let name = test.testName {
+  for module in modules {
+   let isTest = module is any TestProtocol
+   lazy var test = module as! any Testable
+   let name = module.typeConstructorName
+   let label: String? = if isTest, let name = test.testName {
     name
    } else {
-    test.idString
+    module.idString
    }
 
    if isTest {
-    if let label {
-     print(
-      "\n[ \(label, style: .bold) ]",
-      "\("starting", color: .cyan)",
-      "\(name, color: .cyan, style: .bold)",
-      "❖"
-     )
-    } else {
-     print(
-      "\n[ \(name, color: .cyan, style: .bold) ]", "\("starting", style: .dim)",
-      "❖"
-     )
+    try await test.setUp()
+    if !test.silent {
+     if let label {
+      print(
+       "\n[ \(label, style: .bold) ]",
+       "\("starting", color: .cyan)",
+       "\(name, color: .cyan, style: .bold)",
+       "❖"
+      )
+     }
     }
    }
 
@@ -60,7 +57,7 @@ public extension Testable {
 
    do {
     if
-     let test = test as? any Testable,
+     isTest,
      let modules = try await test.tests as? Modules {
      timer.fire()
      try await self.test(modules, timer: &timer)
@@ -68,18 +65,18 @@ public extension Testable {
      var valid = true
 
      var result = try await {
-      if let test = test as? any AsyncFunction {
+      if let asyncFunction = module as? any AsyncFunction {
        timer.fire()
-       return try await test.callAsyncFunction()
-      } else if let test = test as? any Function {
+       return try await asyncFunction.callAsyncFunction()
+      } else if let function = module as? any Function {
        timer.fire()
-       return try await test()
-      } else if let test = test as? any TestProtocol {
+       return try await function.callAsFunction()
+      } else if isTest {
        timer.fire()
        return try await test.callAsTest()
       } else {
        timer.fire()
-       return try await test.callAsFunction()
+       return try await module.callAsFunction()
       }
      }()
 
@@ -97,10 +94,10 @@ public extension Testable {
       )
      } else {
       print(
-       test.idString == nil
+       module.idString == nil
         ? .empty
         : String.arrow.applying(color: .cyan, style: .boldDim) + .space +
-        "\(test.idString!, color: .cyan, style: .bold)"
+        "\(module.idString!, color: .cyan, style: .bold)"
       )
      }
 
@@ -131,7 +128,7 @@ public extension Testable {
     print(String.newline + message)
     print(endMessage + .newline)
 
-    if testMode == .break {
+    if (isTest && test.testMode == .break) || testMode == .break {
      throw TestsError(message: message)
     }
    }
@@ -716,7 +713,7 @@ public struct BenchmarkModules<ID: Hashable>: TestProtocol {
  public var id: ID? { benchmarks.id }
  public init(
   _ id: ID,
-  warmup: Size = 2,
+  warmup: Size = .zero,
   iterations: Size = 10,
   timeout: Double = 5.0,
   setUp: (() async throws -> ())? = nil,
@@ -750,7 +747,7 @@ public struct BenchmarkModules<ID: Hashable>: TestProtocol {
  }
 
  public init(
-  warmup: Size = 2,
+  warmup: Size = .zero,
   iterations: Size = 10,
   timeout: Double = 5.0,
   setUp: (() async throws -> ())? = nil,
@@ -793,3 +790,55 @@ public extension TestProtocol {
  typealias BenchmarkModule<A> = BenchmarkModules<A> where A: Hashable
 }
 #endif
+
+public struct Catch<ID: Hashable>: Testable {
+ public init(
+  id: ID? = nil,
+  silent: Bool = true,
+  @Modular modules: @escaping () async throws -> Modules,
+  @Modular onError: @escaping (any Error) async throws -> Modules
+ ) {
+  self.id = id
+  self.silent = silent
+  self.modules = modules
+  self.onError = onError
+ }
+
+ public init(
+  silent: Bool = true,
+  @Modular modules: @escaping () async throws -> Modules,
+  @Modular onError: @escaping (any Error) async throws -> Modules
+ )
+  where ID == EmptyID {
+  self.silent = silent
+  self.modules = modules
+  self.onError = onError
+ }
+
+ public var id: ID?
+ public var silent: Bool = true
+ @Modular
+ let modules: () async throws -> Modules
+ @Modular
+ let onError: (Swift.Error) async throws -> Modules
+
+ public var tests: Modules {
+  get async throws {
+   do {
+    return try await modules()
+   } catch {
+    return try await onError(error)
+   }
+  }
+ }
+}
+
+public struct Throw<Failure: Error>: TestProtocol {
+ public var silent: Bool = true
+ public init(_ error: Failure) {
+  self.error = error
+ }
+
+ public let error: Failure
+ public func callAsTest() throws { throw error }
+}

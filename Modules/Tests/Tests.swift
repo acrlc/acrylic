@@ -8,6 +8,13 @@ public protocol Tests: Testable {
  init()
 }
 
+public extension Tests {
+ @_disfavoredOverload
+ var testName: String? {
+  String(describing: Self.self).replacingOccurrences(of: "Tests", with: "")
+ }
+}
+
 public extension Testable {
  func callAsTestFromContext(id: AnyHashable? = nil) async throws {
   var start = Timer()
@@ -53,10 +60,7 @@ public extension Testable {
    context.state.update(context)
    try await context.updateTask?.value
   }
-
-  // can also be called synchronously
-  // try await (index.value as! Self).callAsTest()
-
+  
   do {
    let startMessage = startMessage
    print(startMessage)
@@ -83,16 +87,16 @@ public extension Testable {
 
 /* MARK: - Executable Support */
 public protocol StaticTests: Tests {
- static func main() async throws
+ static func main() async
 }
 
-extension StaticTests {
+public extension StaticTests {
  @_disfavoredOverload
  /// Loads the test environment and executes all tests
  static func main() async {
   //   load descriptive modules from context
   do { try await Self().callAsTestFromContext() }
-  catch { exit(1) }
+  catch { exit(Int32(error._code)) }
  }
 }
 
