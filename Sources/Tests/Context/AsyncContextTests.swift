@@ -7,6 +7,7 @@ struct TestAsyncContext: Tests {
  @Context
  private var throwError: Bool = false
 
+ @ModuleContext
  @discardableResult
  func defect() async -> Bool {
   throwError = true
@@ -28,15 +29,15 @@ struct TestAsyncContext: Tests {
    let state = ModuleState.initialize(with: Self())
    let index = try state.indices.first.throwing()
    let value = try (index.element as? Self).throwing()
-   let id = index.key
-   let context = try ModuleContext.cache.withLockUnchecked { cache in
-    try cache[id].throwing()
-   }
+   let key = index.key
+   let context = try ModuleContext.cache[key].throwing()
 
-   Perform.Async("Perform & Cancel Tasks") {
+   Perform.Async("Perform & Cancel Tasks") { @ModuleContext in
     value.should = false
     // call tasks stored on context
-    context.callAsFunction()
+    Task.detached {
+     try await context.callAsFunction()
+    }
     context.cancel()
     // check if tasks were cancelled (could throw if performance deviates)
     try (!context.isRunning).throwing()
@@ -58,7 +59,7 @@ struct TestAsyncContext: Tests {
    Assert("Structure Update", value.throwError)
 
    Test("Assert Context Retained w/ Results") {
-    Identity {
+    Identity { @ModuleContext in
      try await state.callAsFunction(context)
 
      let results =

@@ -1,5 +1,3 @@
-import os
-
 public protocol Module: Identifiable {
  associatedtype VoidFunction: Module
  @Modular
@@ -59,11 +57,11 @@ public extension Module {
   }
 
   let index = Reflection.states[id].unsafelyUnwrapped.indices[0]
-  let context = ModuleContext.cache.withLockUnchecked { $0[index.key] }
+  let context = ModuleContext.cache[index.key]
    .unsafelyUnwrapped
 
   if shouldUpdate {
-   try await context.update()
+   await context.update()
    try await context.updateTask?.wait()
   }
 
@@ -72,6 +70,7 @@ public extension Module {
  }
 
  @_spi(ModuleReflection)
+ @ModuleContext
  @_disfavoredOverload
  @inlinable
  func callWithContext(id: AnyHashable? = nil) async throws {
@@ -83,7 +82,7 @@ public extension Module {
   }
 
   let index = Reflection.states[id].unsafelyUnwrapped.indices[0]
-  let context = ModuleContext.cache.withLockUnchecked { $0[index.key] }
+  let context = ModuleContext.cache[index.key]
    .unsafelyUnwrapped
 
   if shouldUpdate {

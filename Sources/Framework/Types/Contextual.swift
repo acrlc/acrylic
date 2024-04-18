@@ -15,14 +15,16 @@ extension ContextModule {
 
 public extension ContextModule {
  unowned static var context: ModuleContext {
-  ModuleContext.cache.withLockUnchecked { $0[index.key] }!
+  ModuleContext.cache[index.key]!
  }
 
+ @ModuleContext
  @inlinable
  func callContext() {
   Self.context.callAsFunction()
  }
 
+ @ModuleContext
  @inlinable
  func cancelContext() {
   Self.context.cancel()
@@ -30,9 +32,10 @@ public extension ContextModule {
 
  @inlinable
  static func updateContext() {
-  context.updateTask = Task { try await context.update() }
+  context.updateTask = Task { @ModuleContext in context.update() }
  }
 
+ @ModuleContext 
  @discardableResult
  @inlinable
  mutating func call<Result>(action: (inout Self) -> Result) -> Result {
@@ -41,7 +44,7 @@ public extension ContextModule {
  }
 }
 
-#if canImport(Combine)
+#if canImport(Combine) && canImport(SwiftUI)
 import Combine
 
 public extension ContextModule {
@@ -50,8 +53,7 @@ public extension ContextModule {
   Self.context.objectWillChange
  }
 }
-
-#elseif canImport(OpenCombine)
+#elseif os(WASI) && canImport(TokamakDOM) && canImport(OpenCombine)
 import OpenCombine
 public extension ContextModule {
  @inlinable

@@ -127,7 +127,7 @@ final class Counter: ObservableModule {
 
 extension Module {
  var contextInfo: [String] {
-  let cache = ModuleContext.cache.withLockUnchecked { $0 }
+  let cache = ModuleContext.cache
   let contextInfo = "contexts: " + cache.count.description.readable
   let reflectionInfo = "reflections: " +
    Reflection.states.count.description.readable

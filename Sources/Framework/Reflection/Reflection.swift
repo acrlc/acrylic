@@ -58,6 +58,7 @@ extension Reflection {
   return state
  }
 
+ @ModuleContext(unsafe)
  @usableFromInline
  static func callIfNeeded<A: StaticModule>(_ moduleType: A.Type) {
   if states[A._mangledName] == nil {
@@ -86,14 +87,14 @@ extension Reflection {
 
    index.step(initialState.recurse)
 
-   ModuleContext.cache.withLockUnchecked { $0[index.key] }
+   ModuleContext.cache[index.key]
     .unsafelyUnwrapped
     .callAsFunction()
   } else {
    let index = states[A._mangledName].unsafelyUnwrapped.indices[0]
 
    let context =
-    ModuleContext.cache.withLockUnchecked { $0[index.key] }
+    ModuleContext.cache[index.key]
      .unsafelyUnwrapped
 
    if context.calledTask != nil {
@@ -146,6 +147,7 @@ extension Reflection {
  }
 
 
+ @ModuleContext(unsafe)
  /// Enables repeated calls from a base module using an id to retain state
  @discardableResult
  @usableFromInline
@@ -179,7 +181,7 @@ extension Reflection {
 
    index.step(initialState.recurse)
 
-   ModuleContext.cache.withLockUnchecked { $0[index.key] }.unsafelyUnwrapped
+   ModuleContext.cache[index.key].unsafelyUnwrapped
     .callAsFunction()
 
    return withUnsafeMutablePointer(to: &index.element) { $0 }
@@ -187,7 +189,7 @@ extension Reflection {
    let index = states[id].unsafelyUnwrapped.indices[0]
 
    let context =
-    ModuleContext.cache.withLockUnchecked { $0[index.key] }.unsafelyUnwrapped
+    ModuleContext.cache[index.key].unsafelyUnwrapped
 
    context.callAsFunction()
    return withUnsafeMutablePointer(to: &index.element) { $0 }

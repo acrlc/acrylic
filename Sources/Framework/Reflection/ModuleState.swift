@@ -1,5 +1,4 @@
 import struct Core.UnsafeRecursiveNode
-import struct os.OSAllocatedUnfairLock
 @_spi(Reflection) import func ReflectionMirror._forEachFieldWithKeyPath
 
 @usableFromInline typealias AnyModule = any Module
@@ -23,21 +22,19 @@ open class ModuleState {
 
 @_spi(ModuleReflection)
 public extension ModuleState {
+ @ModuleContext
  @inlinable
  func callAsFunction(_ context: ModuleContext) async throws {
-  try await context.phase.withLockUnchecked {
-   context.cancel()
-   _ = context.index.withLockUnchecked { $0.step(recurse) }
-   return Task { try await context.callTasks() }
-  }.value
+  context.cancel()
+  context.index.step(recurse)
+  try await context.callTasks()
  }
 
+ @ModuleContext
  @inlinable
  func update(_ context: ModuleContext) {
-  context.phase.withLockUnchecked {
-   context.cancel()
-   _ = context.index.withLockUnchecked { $0.step(recurse) }
-  }
+  context.cancel()
+  context.index.step(recurse)
  }
 
  @inlinable
@@ -51,7 +48,7 @@ public extension ModuleState {
   let key = index.key
 
   let context =
-   ModuleContext.cache.withLockUnchecked { $0[key] } ??
+   ModuleContext.cache[key] ??
    .cached(index, with: self, key: key)
 
   if module.hasVoid {
@@ -192,12 +189,10 @@ public extension ModuleContext {
  static func cached(
   _ index: ModuleState.Index, with state: ModuleState, key: AnyHashable
  ) -> ModuleContext {
-  ModuleContext.cache.withLockUnchecked {
-   $0[key] = index.element.context(from: index, state: state)
-   let context = $0[key].unsafelyUnwrapped
-   index.element.assign(to: context)
-   return context
-  }
+  ModuleContext.cache[key] = index.element.context(from: index, state: state)
+  let context = ModuleContext.cache[key].unsafelyUnwrapped
+  index.element.assign(to: context)
+  return context
  }
 }
 
@@ -243,6 +238,6 @@ public extension ModuleState.Index {
  var key: Int { id.hashValue }
 
  var context: ModuleContext? {
-  ModuleContext.cache.withLockUnchecked { $0[self.key] }
+  ModuleContext.cache[self.key]
  }
 }

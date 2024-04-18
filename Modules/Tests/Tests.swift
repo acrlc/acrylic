@@ -54,10 +54,10 @@ public extension Testable {
   let state = Reflection.states[id] as! TestState<Self>
   let index = state.indices[0]
   let context =
-   ModuleContext.cache.withLockUnchecked { $0[index.key] }.unsafelyUnwrapped
+   ModuleContext.cache[index.key].unsafelyUnwrapped
 
   if shouldUpdate {
-   context.state.update(context)
+   await context.state.update(context)
    try await context.updateTask?.value
   }
   

@@ -16,7 +16,7 @@ final class TestState<A: Testable>: ModuleState {
   let key = index.key
 
   let context =
-   ModuleContext.cache.withLockUnchecked { $0[key] } ??
+   ModuleContext.cache[key] ??
    .cached(index, with: self, key: key)
 
   if module.hasVoid || module is (any Testable) {
@@ -81,14 +81,14 @@ extension Tasks {
   let current = operations
   removeAll()
 
-  let index = context.index.withLockUnchecked { $0 }
+  let index = context.index
 
   let module = index.element
   let isTest = module is any TestProtocol
   lazy var test = (module as! any TestProtocol)
   let name = module.typeConstructorName
   let baseName =
-   context.index.withLockUnchecked { $0.start.element }.typeConstructorName
+   context.index.start.element.typeConstructorName
   let label: String? = if isTest, let name = test.testName {
    name
   } else {
@@ -222,34 +222,33 @@ extension Tasks {
 }
 
 extension ModuleContext {
+ @ModuleContext
  func callTests(with state: TestState<some Testable>) async throws {
-  try await index.withLockUnchecked { baseIndex in
-   self.results = .empty
+  results = .empty
 
-   let baseIndex = baseIndex
-   let task = Task {
-    let baseModule = baseIndex.element
-    self.results[baseIndex.key] =
-     try await self.callTestResults(baseModule, with: state)
+  let baseIndex = index
+  let task = Task {
+   let baseModule = baseIndex.element
+   self.results[baseIndex.key] =
+    try await self.callTestResults(baseModule, with: state)
 
-    let baseIndices = baseIndex.indices
-    guard baseIndices.count > 1 else {
-     return
-    }
-
-    let indices = baseIndices.dropFirst().map {
-     ($0, $0.context.unsafelyUnwrapped)
-    }
-
-    for (index, context) in indices {
-     self.results[index.key] =
-      try await context.callTestResults(index.element, with: state)
-    }
+   let baseIndices = baseIndex.indices
+   guard baseIndices.count > 1 else {
+    return
    }
 
-   self.calledTask = task
-   return task
-  }.value
+   let indices = baseIndices.dropFirst().map {
+    ($0, $0.context.unsafelyUnwrapped)
+   }
+
+   for (index, context) in indices {
+    self.results[index.key] =
+     try await context.callTestResults(index.element, with: state)
+   }
+  }
+
+  calledTask = task
+  try await task.value
  }
 
  @discardableResult

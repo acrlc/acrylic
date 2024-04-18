@@ -15,7 +15,7 @@ extension StaticModule {
 
 public extension StaticModule {
  unowned static var context: ModuleContext {
-  ModuleContext.cache.withLockUnchecked { $0[index.key] }!
+  ModuleContext.cache[index.key]!
  }
 
  @inlinable
@@ -23,6 +23,7 @@ public extension StaticModule {
   Self.context.callAsFunction()
  }
 
+ @ModuleContext 
  @inlinable
  func cancelContext() {
   Self.context.cancel()
@@ -30,7 +31,7 @@ public extension StaticModule {
 
  @inlinable
  static func updateContext() {
-  context.updateTask = Task { try await context.update() }
+  context.updateTask = Task { @ModuleContext in context.update() }
  }
 
  @discardableResult
@@ -41,7 +42,7 @@ public extension StaticModule {
  }
 }
 
-#if canImport(Combine)
+#if canImport(Combine) && canImport(SwiftUI)
 import Combine
 
 public extension StaticModule {
@@ -50,8 +51,7 @@ public extension StaticModule {
   Self.context.objectWillChange
  }
 }
-
-#elseif canImport(OpenCombine)
+#elseif os(WASI) && canImport(TokamakDOM) && canImport(OpenCombine)
 import OpenCombine
 extension StaticModule {
  @inlinable

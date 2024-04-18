@@ -7,10 +7,9 @@ import OpenCombine
 #error("Cannot import Combine framework")
 #endif
 
-#if os(WASI) && canImport(TokamakDOM)
+#if os(WASI)
 import TokamakCore
 import TokamakDOM
-
 extension ModuleContext: OpenCombine.ObservableObject {}
 #elseif canImport(SwiftUI)
 import SwiftUI
@@ -36,6 +35,7 @@ public struct _DynamicContextBindingProperty
   }
  }
 
+ #if os(macOS) || os(iOS)
  @inlinable
  public var projectedValue: Binding<Value> {
   Binding<Value>(
@@ -43,6 +43,7 @@ public struct _DynamicContextBindingProperty
    set: { newValue in wrappedValue = newValue }
   )
  }
+ #endif
 }
 
 public extension View {
@@ -50,8 +51,11 @@ public extension View {
   where A: StaticModule
  typealias ObservedAlias<A, Value> = _ObservedModuleAliasProperty<A, Value>
   where A: ObservableModule
- typealias ContextAlias<A, Value> = _ObservedContextModuleAliasProperty<A, Value>
- where A: ContextModule
+ typealias ContextAlias<A, Value> = _ObservedContextModuleAliasProperty<
+  A,
+  Value
+ >
+  where A: ContextModule
 }
 
 public extension App {
@@ -99,6 +103,7 @@ public struct _StaticModuleAliasProperty
   nonmutating set { A.shared[keyPath: keyPath] = newValue }
  }
 
+ #if os(macOS) || os(iOS)
  @inlinable
  public var projectedValue: Binding<Value> {
   Binding<Value>(
@@ -106,6 +111,7 @@ public struct _StaticModuleAliasProperty
    set: { newValue in wrappedValue = newValue }
   )
  }
+ #endif
 }
 
 public extension _StaticModuleAliasProperty {
@@ -119,7 +125,7 @@ public extension _StaticModuleAliasProperty {
 
  @usableFromInline
  internal unowned static var context: ModuleContext {
-  ModuleContext.cache.withLockUnchecked { $0[index.key] }!
+  ModuleContext.cache[index.key]!
  }
 
  init(
@@ -171,8 +177,13 @@ public struct _ObservedModuleAliasProperty
  @usableFromInline
  let keyPath: WritableKeyPath<A, Value>
 
+#if canImport(SwiftUI) || canImport(TokamakDOM)
  @ObservedObject
  var module: A = .shared
+ #else
+ unowned var module: A = .shared
+ #endif
+ 
  public unowned var context: ModuleContext = .shared
 
  @inlinable
@@ -182,6 +193,7 @@ public struct _ObservedModuleAliasProperty
  }
 
  // FIXME: context properties to update context here (from projectedValue)
+ #if os(macOS) || os(iOS)
  @inlinable
  public var projectedValue: Binding<Value> {
   Binding<Value>(
@@ -189,6 +201,7 @@ public struct _ObservedModuleAliasProperty
    set: { newValue in wrappedValue = newValue }
   )
  }
+ #endif
 }
 
 public extension _ObservedModuleAliasProperty {
@@ -202,7 +215,7 @@ public extension _ObservedModuleAliasProperty {
 
  @usableFromInline
  internal unowned static var context: ModuleContext {
-  ModuleContext.cache.withLockUnchecked { $0[index.key] }!
+  ModuleContext.cache[index.key]!
  }
 
  init(
@@ -255,23 +268,28 @@ public struct _ObservedContextModuleAliasProperty
  public var id = AnyHashable(A._mangledName)
  @usableFromInline
  let keyPath: WritableKeyPath<A, Value>
- 
+
  @usableFromInline
  var module: A {
   get { Self.index.element as! A }
   nonmutating set { Self.index.element = newValue }
  }
- 
+
+#if canImport(SwiftUI) || canImport(TokamakDOM)
  @ObservedObject
  public var context: ModuleContext = .shared
- 
+#else
+ public unowned var context: ModuleContext = .shared
+#endif
+
  @inlinable
  public var wrappedValue: Value {
   nonmutating get { module[keyPath: keyPath] }
   nonmutating set { module[keyPath: keyPath] = newValue }
  }
- 
+
  // FIXME: context properties to update context here (from projectedValue)
+ #if os(macOS) || os(iOS)
  @inlinable
  public var projectedValue: Binding<Value> {
   Binding<Value>(
@@ -279,6 +297,7 @@ public struct _ObservedContextModuleAliasProperty
    set: { newValue in wrappedValue = newValue }
   )
  }
+ #endif
 }
 
 public extension _ObservedContextModuleAliasProperty {
@@ -286,15 +305,15 @@ public extension _ObservedContextModuleAliasProperty {
  internal unowned static var state: ModuleState {
   Reflection.states[A._mangledName].unsafelyUnwrapped
  }
- 
+
  @usableFromInline
  internal static var index: ModuleIndex { state.indices[0] }
- 
+
  @usableFromInline
  internal unowned static var context: ModuleContext {
-  ModuleContext.cache.withLockUnchecked { $0[index.key] }!
+  ModuleContext.cache[index.key]!
  }
- 
+
  init(
   wrappedValue: Value,
   _ keyPath: KeyPath<A, ContextProperty<Value>>, _ call: Bool = false
@@ -306,7 +325,7 @@ public extension _ObservedContextModuleAliasProperty {
   id = wrapper.id
   self.wrappedValue = wrappedValue
  }
- 
+
  init(_ keyPath: KeyPath<A, ContextProperty<Value>>, _ call: Bool = false) {
   Reflection.cacheOrCall(A(), id: A._mangledName, call: call)
   self.keyPath = keyPath.appending(path: \.wrappedValue)
@@ -314,14 +333,14 @@ public extension _ObservedContextModuleAliasProperty {
   context = wrapper.context
   id = wrapper.id
  }
- 
+
  @_disfavoredOverload
  init(_ keyPath: WritableKeyPath<A, Value>, _ call: Bool = false) {
   self.keyPath = keyPath
   Reflection.cacheOrCall(A(), id: A._mangledName, call: call)
   context = Self.context
  }
- 
+
  @_disfavoredOverload
  init(_ type: A.Type, _ call: Bool = false) where Value == A {
   keyPath = \A.self

@@ -1,38 +1,40 @@
 import Core
-import struct os.OSAllocatedUnfairLock
 
 /// A context class for sharing and updating the state across modules
-public final class ModuleContext: Identifiable, Equatable, Operational {
+@globalActor
+public actor ModuleContext: Identifiable,
+ Equatable /* , Operational can't be met due to actor isolated `cancel()` */ {
  public static let shared = ModuleContext()
 
- public lazy var phase = OSAllocatedUnfairLock<()>(initialState: ())
+ public static var cache = [AnyHashable: ModuleContext]()
 
- public static var cache =
-  OSAllocatedUnfairLock<[AnyHashable: ModuleContext]>(initialState: .empty)
-
- public unowned var state: ModuleState = .unknown
- public var index =
-  OSAllocatedUnfairLock<ModuleState.Index>(initialState: .start)
+ public
+ nonisolated lazy var state: ModuleState = .unknown
+ public nonisolated
+ lazy var index = ModuleState.Index.start
 
  /// Stored values that are relevant to framework specific property wrappers
-// @usableFromInline
-// var values: [AnyHashable: Any] = .empty
+ @ModuleContext(unsafe)
  @usableFromInline
- var values =
-  OSAllocatedUnfairLock<[AnyHashable: Any]>(initialState: .empty)
+ lazy var values = [AnyHashable: Any]()
 
- public lazy var tasks = Tasks(id: self.id)
+ public nonisolated
+ lazy var tasks = Tasks(id: self.id)
 
  /// The currently executing update function
- public var updateTask: Task<(), Error>?
- public var calledTask: Task<(), Error>?
+ public nonisolated
+ lazy var updateTask: Task<(), Error>? = nil
+ public nonisolated
+ lazy var calledTask: Task<(), Error>? = nil
 
  /// Results returned from calling `tasks`
  @_spi(ModuleReflection)
- public var results: [AnyHashable: Sendable] = .empty
+ @ModuleContext(unsafe)
+ public lazy var results: [AnyHashable: Sendable] = .empty
 
  @_spi(ModuleReflection)
- public lazy var properties: DynamicProperties? = nil
+ public nonisolated
+ lazy var properties: DynamicProperties? = nil
 
  /// Initializer used for indexing modules
  init(
@@ -40,7 +42,7 @@ public final class ModuleContext: Identifiable, Equatable, Operational {
   state: ModuleState,
   properties: DynamicProperties? = nil
  ) {
-  self.index.withLockUnchecked { $0 = index }
+  self.index = index
   self.state = state
   self.properties = properties
  }
@@ -55,7 +57,7 @@ public final class ModuleContext: Identifiable, Equatable, Operational {
 
 public extension ModuleContext {
  /// Cancels all tasks in reverse including the subsequent and removes elements
- @inlinable
+ @ModuleContext
  func cancel() {
   if let calledTask {
    calledTask.cancel()
@@ -66,29 +68,27 @@ public extension ModuleContext {
   }
 
   tasks.cancel()
-  index.withLockUnchecked { baseIndex in
-   let baseIndices = baseIndex.indices
+  let baseIndices = index.indices
 
-   guard baseIndices.count > 1 else {
-    return
-   }
-   let indices = baseIndices.dropFirst()
+  guard baseIndices.count > 1 else {
+   return
+  }
+  let indices = baseIndices.dropFirst()
 
-   for index in indices.reversed() {
-    let key = index.key
-    let context = index.context.unsafelyUnwrapped
-    let offset = index.offset
+  for index in indices.reversed() {
+   let key = index.key
+   let context = index.context.unsafelyUnwrapped
+   let offset = index.offset
 
-    context.tasks.cancel()
-    index.base.remove(at: offset)
-    index.indices.remove(at: offset)
-    _ = ModuleContext.cache.withLockUnchecked { $0.removeValue(forKey: key) }
-   }
+   context.tasks.cancel()
+   index.base.remove(at: offset)
+   index.indices.remove(at: offset)
+   ModuleContext.cache.removeValue(forKey: key)
   }
  }
 
  @inlinable
- var isRunning: Bool { tasks.isRunning }
+ nonisolated var isRunning: Bool { tasks.isRunning }
 
  /// Allow all called tasks to finish, excluding detached tasks
  @inlinable
@@ -105,50 +105,48 @@ public extension ModuleContext {
    try await task.wait()
   }
 
-  try await index.withLockUnchecked { baseIndex in
-   let baseIndex = baseIndex
-   return Task {
-    let baseIndices = baseIndex.indices
-    guard baseIndices.count > 1 else {
-     return
-    }
+  let baseIndex = index
+  let baseIndices = baseIndex.indices
+  guard baseIndices.count > 1 else {
+   return
+  }
 
-    for tasks in baseIndices.dropFirst().map(\.context!.tasks) {
-     for task in tasks.detached {
-      try await task.wait()
-     }
-    }
+  for tasks in baseIndices.dropFirst().map(\.context!.tasks) {
+   for task in tasks.detached {
+    try await task.wait()
    }
-  }.value
+  }
  }
 }
 
 /* MARK: - Update Functions */
 public extension ModuleContext {
+ @ModuleContext
  @inline(__always)
  func callAsFunction() async throws {
   try await state.callAsFunction(self)
  }
 
+ @ModuleContext
  @inline(__always)
- func update() async throws {
+ func update() {
   state.update(self)
  }
 
- func callAsFunction(state: ModuleState) {
-  updateTask = Task {
+ nonisolated func callAsFunction(state: ModuleState) {
+  updateTask = Task { @ModuleContext in
    try await state.callAsFunction(self)
   }
  }
 
- func callAsFunction() {
-  updateTask = Task {
+ nonisolated func callAsFunction() {
+  updateTask = Task { @ModuleContext in
    try await state.callAsFunction(self)
   }
  }
 
- func callAsFunction(prior: ModuleContext) {
-  updateTask = Task {
+ nonisolated func callAsFunction(prior: ModuleContext) {
+  updateTask = Task { @ModuleContext in
    try await state.callAsFunction(self)
    state.update(prior)
   }
@@ -156,33 +154,32 @@ public extension ModuleContext {
 }
 
 public extension ModuleContext {
+ @ModuleContext
  func callTasks() async throws {
   #if DEBUG
   assert(!(calledTask?.isRunning ?? false))
   #endif
-  try await index.withLockUnchecked { baseIndex in
+  results = .empty
+
+  let baseIndex = index
+  let task = Task {
    self.results = .empty
+   self.results[baseIndex.key] = try await self.tasks()
 
-   let baseIndex = baseIndex
-   let task = Task {
-    self.results = .empty
-    self.results[baseIndex.key] = try await self.tasks()
-
-    let baseIndices = baseIndex.indices
-    guard baseIndices.count > 1 else {
-     return
-    }
-    let elements = baseIndices.dropFirst().map {
-     ($0, $0.context.unsafelyUnwrapped)
-    }
-
-    for (index, context) in elements {
-     self.results[index.key] = try await context.tasks()
-    }
+   let baseIndices = baseIndex.indices
+   guard baseIndices.count > 1 else {
+    return
+   }
+   let elements = baseIndices.dropFirst().map {
+    ($0, $0.context.unsafelyUnwrapped)
    }
 
-   self.calledTask = task
-   return task
-  }.value
+   for (index, context) in elements {
+    self.results[index.key] = try await context.tasks()
+   }
+  }
+
+  calledTask = task
+  try await task.value
  }
 }

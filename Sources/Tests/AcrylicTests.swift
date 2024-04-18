@@ -100,7 +100,7 @@ struct AcrylicTests: Tests & AsyncCommand {
   #if os(WASI) || canImport(SwiftUI)
   // clear previous states / contexts
   Reflection.states.removeAll()
-  ModuleContext.cache.withLockUnchecked { $0.removeAll() }
+  ModuleContext.cache.removeAll()
   print()
 
   notify(

@@ -12,7 +12,7 @@ struct TestMapAsyncDetachedTasks: Testable {
    Map(count: limit) { int in
     Map(count: int * int) { int in
      Map(count: int * int) { int in
-      Perform.Async(priority: .high, detached: true) {
+      Perform.Async(priority: .high, detached: true) { @ModuleContext in
        try await sleep(for: .microseconds(int))
        count += 1
       }
@@ -21,11 +21,12 @@ struct TestMapAsyncDetachedTasks: Testable {
    }
 
    Perform.Async {
-    let context = _count.context.index.withLock { index in
+    let context = {
+     let index = _count.context.index
      let context = index.indices.compactMap(\.context)
       .first(where: { $0.isRunning })
      return context
-    }
+    }()
 
     try await context?.waitForAll()
    }

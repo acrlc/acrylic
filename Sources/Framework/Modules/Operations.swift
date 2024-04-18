@@ -105,14 +105,12 @@ public struct AsyncTask
   guard let context else {
    return
   }
-  context.phase.withLockUnchecked {
-   let id = id
-   if let task = context.tasks.running[id] {
-    task.cancel()
-    context.tasks.running[id] = nil
-   }
-   context.tasks.queue[id] = nil
+  let id = id
+  if let task = context.tasks.running[id] {
+   task.cancel()
+   context.tasks.running[id] = nil
   }
+  context.tasks.queue[id] = nil
  }
 
  @_spi(ModuleReflection)
@@ -139,7 +137,7 @@ public struct AsyncTask
 }
 
 import protocol Core.ExpressibleAsEmpty
-import struct os.OSAllocatedUnfairLock
+
 /// Manages tasks for a reflection to allow concurrent tasks
 /// that can pause or cancel when needed
 public final class Tasks: Identifiable, ExpressibleAsEmpty, Equatable {
@@ -180,15 +178,10 @@ public final class Tasks: Identifiable, ExpressibleAsEmpty, Equatable {
   return running.notEmpty || detached.notEmpty
  }
 
- @usableFromInline
- let phase = OSAllocatedUnfairLock(uncheckedState: ())
-
  public func removeAll() {
-  self.phase.withLockUnchecked {
-   self.queue.removeAll()
-   self.running.removeAll()
-   self.detached.removeAll()
-  }
+  self.queue.removeAll()
+  self.running.removeAll()
+  self.detached.removeAll()
  }
 
  public func cancel() {
@@ -223,7 +216,7 @@ public final class Tasks: Identifiable, ExpressibleAsEmpty, Equatable {
  @inlinable
  @discardableResult
  public func callAsFunction() async throws -> [Sendable]? {
-  assert(!self.isRunning)
+  //assert(!self.isRunning)
   self.completed = false
   self.cancel()
 

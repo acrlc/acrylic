@@ -1,5 +1,4 @@
 import Foundation
-import os
 
 #if canImport(SwiftUI)
 import protocol SwiftUI.DynamicProperty
@@ -51,11 +50,9 @@ public extension ContextualProperty {
  func move(from previous: ModuleContext, to context: ModuleContext) {
   assert(previous != context)
   if previous != context {
-   context.values.withLockUnchecked { values in
-    let id = self.id
-    if values[id] != nil {
-     _ = previous.values.withLockUnchecked { $0.removeValue(forKey: id) }
-    }
+   let id = id
+   if context.values[id] != nil {
+    previous.values.removeValue(forKey: id)
    }
   }
  }
@@ -76,11 +73,9 @@ ContextProperty<Value: Sendable>: @unchecked Sendable, ContextualProperty {
  public mutating func initialize() {
   if let initialValue {
    let id = id
-   context.values.withLockUnchecked { values in
-    if values.keys.contains(id) {
-     values[id] = initialValue
-     self.initialValue = nil
-    }
+   if context.values.keys.contains(id) {
+    context.values[id] = initialValue
+    self.initialValue = nil
    }
   }
  }
@@ -88,37 +83,34 @@ ContextProperty<Value: Sendable>: @unchecked Sendable, ContextualProperty {
  @inlinable
  public mutating func initialize(with context: ModuleContext) {
   if let initialValue {
-   context.values.withLockUnchecked { values in
-    let id = id
-    if values.keys.contains(id) {
-     values[id] = initialValue
-     self.initialValue = nil
-    }
+   let id = id
+   if context.values.keys.contains(id) {
+    context.values[id] = initialValue
+    self.initialValue = nil
    }
   }
   self.context = context
  }
 
+ @ModuleContext(unsafe)
  @inlinable
  public var wrappedValue: Value {
   get {
-   context.values.withLockUnchecked {
-    if let value = $0[id] as? Value {
-     return value
-    } else
-    if let optional = $0[id] as? Value?, let value = optional {
-     return value
-    } else {
-     precondition(
-      initialValue != nil,
-      "set \(Self.self) within an initializer or on the property"
-     )
-     return initialValue.unsafelyUnwrapped
-    }
+   if let value = context.values[id] as? Value {
+    return value
+   } else
+   if let optional = context.values[id] as? Value?, let value = optional {
+    return value
+   } else {
+    precondition(
+     initialValue != nil,
+     "set \(Self.self) within an initializer or on the property"
+    )
+    return initialValue.unsafelyUnwrapped
    }
   }
   nonmutating set {
-   context.values.withLockUnchecked { $0[self.id] = newValue }
+   context.values[self.id] = newValue
   }
  }
 
@@ -167,6 +159,7 @@ public extension ContextProperty {
   return try body()
  }
 
+ @ModuleContext
  func callAsFunction(_ newValue: @escaping @autoclosure () -> Value = ()) {
   precondition(
    context != .shared,
@@ -188,6 +181,7 @@ import OpenCombine
 
 @MainActor
 public extension ContextProperty {
+ @ModuleContext
  @discardableResult
  func state<A>(
   _ value: @escaping (inout Value) throws -> A
@@ -196,6 +190,7 @@ public extension ContextProperty {
   return try value(&wrappedValue)
  }
 
+ @ModuleContext
  @discardableResult
  func callState<A>(
   _ value: @escaping (inout Value) throws -> A
@@ -207,17 +202,20 @@ public extension ContextProperty {
   return try value(&wrappedValue)
  }
 
+ @ModuleContext
  func state(_ newValue: Value) {
   wrappedValue = newValue
   context.objectWillChange.send()
  }
 
+ @ModuleContext
  func callState(_ newValue: Value) {
   wrappedValue = newValue
   callAsFunction()
   context.objectWillChange.send()
  }
 
+ @ModuleContext
  func updateState() {
   context.objectWillChange.send()
  }
@@ -233,6 +231,7 @@ public extension ContextProperty {
   try body()
  }
 
+ @ModuleContext
  @inlinable
  func update(
   _ newValue: @escaping @autoclosure () -> Value = ()
@@ -246,5 +245,6 @@ public extension Module {
 }
 
 extension ContextProperty: CustomStringConvertible {
+ @ModuleContext(unsafe)
  public var description: String { String(describing: wrappedValue) }
 }
