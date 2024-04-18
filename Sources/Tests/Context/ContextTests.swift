@@ -1,4 +1,5 @@
 @_spi(ModuleReflection) import Acrylic
+
 // A module for testing the basic running and updating
 struct TestContext: Testable {
  @Context
@@ -35,7 +36,7 @@ struct TestContext: Testable {
     }
 
     // assert that the indexed retained it's context
-    Assert("Retained Context", !value.should)
+    Assert("Retained Context") { @ModuleContext in !value.should }
 
     Perform.Async { @ModuleContext in
      value.should = true

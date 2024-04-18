@@ -7,7 +7,7 @@ struct TestMapAsyncDetachedTasks: Testable {
 
  var tests: some Testable {
   Test("Map Async Detached Counter") {
-   Identity(count)
+   Identity { @ModuleContext in count }
 
    Map(count: limit) { int in
     Map(count: int * int) { int in
@@ -31,7 +31,8 @@ struct TestMapAsyncDetachedTasks: Testable {
     try await context?.waitForAll()
    }
 
-   Identity(count)// == limit * (limit * limit) * (limit * limit)
+   Identity { @ModuleContext in count }
+   // == limit * (limit * limit) * (limit * limit)
   }
  }
 }

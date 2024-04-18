@@ -122,7 +122,7 @@ public extension Module {
 }
 
 #if canImport(Shell)
-import Shell
+@_exported import Shell
 
 public extension ModularFunctions {
  struct Echo: Function {

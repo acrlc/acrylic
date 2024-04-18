@@ -36,7 +36,9 @@ struct AcrylicTests: Tests & AsyncCommand {
   Test("Assertions / Break") {
    Test("Switch TestMode") {
     Assert(testMode == .break)
-    Perform.Async("Switch BreakOnError") { breakOnError = false }
+    Perform.Async("Switch BreakOnError") { @ModuleContext in
+     breakOnError = false
+    }
     Assert(testMode == .fall)
    }
 
@@ -48,7 +50,9 @@ struct AcrylicTests: Tests & AsyncCommand {
 
    Test("Reset TestMode") {
     Assert(testMode == .fall)
-    Perform.Async("Reset BreakOnError") { breakOnError = true }
+    Perform.Async("Reset BreakOnError") { @ModuleContext in
+     breakOnError = true
+    }
     Assert(testMode == .break)
    }
   }

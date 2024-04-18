@@ -4,9 +4,9 @@ struct TestMap: Testable {
  var tests: some Testable {
   Test("Map count += 1") {
    Map(count: 3) {
-    Perform { count += 1 }
+    Perform.Async { @ModuleContext in count += 1 }
    }
-   Assert(count == 3)
+   Assert { @ModuleContext in count == 3 }
   }
  }
 }
