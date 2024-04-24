@@ -62,7 +62,8 @@ final class TestsTest: XCTestCase {
  }
 
  func testModule() async throws {
-  try await TestModule().callAsTest()
+  var tests = TestModule()
+  try await tests.callAsTest()
  }
 }
 

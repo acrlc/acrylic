@@ -3,19 +3,20 @@ import XCTest
 
 final class ReflectionTests: XCTestCase {
  func test() async throws {
-  let state = ModuleState.initialize(with: Graph())
+  let state = await ModuleState.initialize(with: Graph())
+  let mainContext = state.mainContext
   let first = state.indices[0]
-  first.forward { index in
-   print(index.start.element)
+  try first.forward { index in
+   let context = try XCTUnwrap(mainContext.cache[index.key])
+   XCTAssert(context.index == index)
   }
+  
   print(state.values.map { $0.id })
 
-  let context = try XCTUnwrap(first.context)
+  try await mainContext.callTasks()
 
-  try await context.callTasks()
-
-  context.cancel()
-  try await context.callTasks()
+  await mainContext.cancel()
+  try await mainContext.callTasks()
  }
 }
 

@@ -24,7 +24,7 @@ public struct _DynamicContextBindingProperty
 
  @usableFromInline
  let keyPath: WritableKeyPath<A, Value>
- public var context: ModuleContext = .shared
+ public unowned var context: ModuleContext = .shared
 
  @inlinable
  public var wrappedValue: Value {

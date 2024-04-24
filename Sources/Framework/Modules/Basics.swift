@@ -7,12 +7,17 @@ public extension Modular {
 
   public var void: Modules { results() }
 
-  public init(_ id: ID, @Modular results: @escaping () -> Results) {
+  public init(
+   _ id: ID,
+   @Modular @_implicitSelfCapture results: @escaping () -> Results
+  ) {
    self.id = id
    self.results = results
   }
 
-  public init(@Modular results: @escaping () -> Results) where ID == EmptyID {
+  public init(
+   @Modular @_implicitSelfCapture results: @escaping () -> Results
+  ) where ID == EmptyID {
    self.results = results
   }
 
@@ -41,7 +46,7 @@ public extension Modular {
 
   public init(
    _ id: ID, _ elements: Elements,
-   @Modular result: @escaping (Elements.Element) -> Result
+   @Modular @_implicitSelfCapture result: @escaping (Elements.Element) -> Result
   ) {
    self.id = id
    self.elements = elements
@@ -50,7 +55,7 @@ public extension Modular {
 
   public init(
    _ elements: Elements,
-   @Modular result: @escaping (Elements.Element) -> Result
+   @Modular @_implicitSelfCapture result: @escaping (Elements.Element) -> Result
   ) where ID == EmptyID {
    self.elements = elements
    self.result = result
@@ -80,7 +85,7 @@ public extension Module.Map where Elements == Range<Int> {
  init(
   _ id: ID,
   count: Int,
-  @Modular result: @escaping (Elements.Element) -> Result
+  @Modular @_implicitSelfCapture result: @escaping (Elements.Element) -> Result
  ) {
   self.id = id
   elements = 0 ..< count
@@ -89,7 +94,7 @@ public extension Module.Map where Elements == Range<Int> {
 
  init(
   count: Int,
-  @Modular result: @escaping (Elements.Element) -> Result
+  @Modular @_implicitSelfCapture result: @escaping (Elements.Element) -> Result
  ) where ID == EmptyID {
   elements = 0 ..< count
   self.result = result
@@ -98,7 +103,7 @@ public extension Module.Map where Elements == Range<Int> {
  init(
   _ id: ID,
   count: Int,
-  @Modular result: @escaping () -> Result
+  @Modular @_implicitSelfCapture result: @escaping () -> Result
  ) {
   self.id = id
   elements = 0 ..< count
@@ -107,7 +112,7 @@ public extension Module.Map where Elements == Range<Int> {
 
  init(
   count: Int,
-  @Modular result: @escaping () -> Result
+  @Modular @_implicitSelfCapture result: @escaping () -> Result
  ) where ID == EmptyID {
   id = nil
   elements = 0 ..< count

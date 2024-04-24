@@ -8,18 +8,24 @@ open class Modular {
 // }
 
  public static func buildBlock<Result: Sendable>(
+  @_implicitSelfCapture
   _ action: @autoclosure @escaping () throws -> Result
  ) -> Perform<EmptyID, Result> {
   Perform(action: { try action() })
  }
 
  public static func buildBlock<Result: Sendable>(
+  @_implicitSelfCapture
   _ action: @Sendable @autoclosure @escaping () async throws -> Result
  ) async -> Perform<EmptyID, Result>.Async {
   Perform.Async(action: { try await action() })
  }
 
- public static func buildBlock<A: Module>(_ module: A) -> A { module }
+ public static func buildBlock<A: Module>(
+  @_implicitSelfCapture
+  _ module: @autoclosure () -> A
+ ) -> A { module() }
+ 
  public static func buildBlock(_ components: Component...) -> Components {
   components._flattened
  }
