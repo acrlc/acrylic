@@ -16,8 +16,7 @@ final class TestState<A: Testable>: ModuleState {
   let key = index.key
 
   let context =
-   ModuleContext.cache[key] ??
-   .cached(index, with: self, key: key)
+   mainContext.cache[key] ?? .cached(index, with: self, key: key)
 
   if module.hasVoid || module is (any Testable) {
    let void =
@@ -75,17 +74,19 @@ extension Tasks {
  @discardableResult
  func callAsTest(
   from context: ModuleContext, with state: TestState<some Testable>
- ) async throws -> [Sendable]? {
-  cancel()
+ ) async throws -> [AnyHashable: Sendable]? {
+  await cancel()
 
   let current = operations
   removeAll()
+  completed = false
 
   let index = context.index
-
   let module = index.element
+
   let isTest = module is any TestProtocol
   lazy var test = (module as! any TestProtocol)
+
   let name = module.typeConstructorName
   let baseName =
    context.index.start.element.typeConstructorName
@@ -126,32 +127,39 @@ extension Tasks {
     "\(endTime + .space, style: .boldDim)"
   }
 
-  task = Task {
-   var results: [Sendable] = .empty
-
-   state.timer.fire()
-
-   for task in current {
-    if task.detached {
-     self.detached.append(Task { try await task() })
-    }
-    else {
-     try await results.append(task())
-    }
-   }
-   return results
-  }
-
   do {
-   let results = try await task.unsafelyUnwrapped.value
+   let task = Task {
+    var results: [AnyHashable: Sendable] = .empty
+
+    state.timer.fire()
+    for task in current {
+     let id = task.id
+     let key = AnyHashable(id)
+
+     if task.detached {
+      self.detached[key] =
+       Task { try await task() }
+     }
+     else {
+      results[key] = try await task()
+     }
+    }
+
+    return results
+   }
+
+   self.task = task
+
+   let results = try await task.value
 
    endTime = timer.elapsed.description
 
-   for task in detached {
+   for (_, task) in detached {
     try await task.wait()
    }
 
-   var result = results[0]
+   let key = index.key
+   var result = results[key].unsafelyUnwrapped
    var valid = true
 
    print(
@@ -222,13 +230,11 @@ extension Tasks {
 }
 
 extension ModuleContext {
- @ModuleContext
  func callTests(with state: TestState<some Testable>) async throws {
-  results = .empty
-
   let baseIndex = index
   let task = Task {
    let baseModule = baseIndex.element
+   results = .empty
    self.results[baseIndex.key] =
     try await self.callTestResults(baseModule, with: state)
 
@@ -238,7 +244,7 @@ extension ModuleContext {
    }
 
    let indices = baseIndices.dropFirst().map {
-    ($0, $0.context.unsafelyUnwrapped)
+    ($0, self.cache[$0.key].unsafelyUnwrapped)
    }
 
    for (index, context) in indices {
@@ -254,17 +260,16 @@ extension ModuleContext {
  @discardableResult
  func callTestResults(
   _ value: any Module, with state: TestState<some Testable>
- ) async throws -> [Sendable]? {
+ ) async throws -> [AnyHashable: Sendable]? {
   if let detachable = value as? Detachable, detachable.detached {
-   let results = try await tasks.callAsFunction()
-   try await waitForAll()
-   return results
+   return try await tasks.callAsFunction()
   }
 
   return try await tasks.callAsTest(from: self, with: state)
  }
 }
 
+@Reflection(unsafe)
 extension Reflection {
  /// Enables repeated calls from a base module using an id to retain state
  @usableFromInline
@@ -297,6 +302,8 @@ extension Reflection {
 
    let index = initialState.indices[0]
 
+   initialState.mainContext = .cached(index, with: initialState, key: index.key)
+
    try await index.step(initialState.recurse)
 
    return false
@@ -313,7 +320,9 @@ extension TestProtocol {
    id: key,
    context: context
   ) {
-   try await self.callAsTest()
+   var copy = self
+   defer { index.checkedElement = copy }
+   return try await copy.callAsTest()
   }
   return self
  }
@@ -353,7 +362,7 @@ public extension Task where Failure == Never {
 extension Module {
  @usableFromInline
  var isIdentifiable: Bool {
-  !(ID.self is Never.Type) && !(id is EmptyID)
+  !(ID.self is Never.Type) && !(ID.self is EmptyID.Type)
  }
 }
 

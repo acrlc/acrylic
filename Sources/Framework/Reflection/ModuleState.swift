@@ -4,14 +4,17 @@ import struct Core.UnsafeRecursiveNode
 @usableFromInline typealias AnyModule = any Module
 @usableFromInline
 typealias ModuleIndex = UnsafeRecursiveNode<Modules>
+extension ModuleState.Index: @unchecked Sendable {}
 
-open class ModuleState {
+open class ModuleState: @unchecked Sendable {
  public typealias Base = Modules
  public typealias Index = UnsafeRecursiveNode<Modules>
  public typealias Element = Index.Element
  public typealias Values = Index.Base
  public typealias Indices = Index.Indices
  static let unknown = ModuleState()
+ @_spi(ModuleReflection)
+ public var mainContext: ModuleContext = .shared
  @_spi(ModuleReflection)
  public var values: Values = .empty
  @_spi(ModuleReflection)
@@ -22,18 +25,16 @@ open class ModuleState {
 
 @_spi(ModuleReflection)
 public extension ModuleState {
- @ModuleContext
  @inlinable
  func callAsFunction(_ context: ModuleContext) async throws {
-  context.cancel()
+  await context.cancelAndWait()
   context.index.step(recurse)
   try await context.callTasks()
  }
 
- @ModuleContext
  @inlinable
- func update(_ context: ModuleContext) {
-  context.cancel()
+ func update(_ context: ModuleContext) async {
+  await context.cancelAndWait()
   context.index.step(recurse)
  }
 
@@ -48,8 +49,7 @@ public extension ModuleState {
   let key = index.key
 
   let context =
-   ModuleContext.cache[key] ??
-   .cached(index, with: self, key: key)
+   mainContext.cache[key] ?? .cached(index, with: self, key: key)
 
   if module.hasVoid {
    let void = module.void
@@ -66,17 +66,14 @@ public extension ModuleState {
 extension Module {
  @usableFromInline
  var isIdentifiable: Bool {
-  !(ID.self is Never.Type) && !(id is EmptyID)
+  !(ID.self is Never.Type) && !(ID.self is EmptyID.Type)
  }
 
  @usableFromInline
  func context(from index: ModuleIndex, state: ModuleState) -> ModuleContext {
   var properties = DynamicProperties()
 
-  _forEachFieldWithKeyPath(
-   of: Self.self,
-   options: .ignoreUnknown
-  ) { char, keyPath in
+  _forEachFieldWithKeyPath(of: Self.self) { char, keyPath in
    let label = String(cString: char)
    if
     label.hasPrefix("_"),
@@ -189,22 +186,30 @@ public extension ModuleContext {
  static func cached(
   _ index: ModuleState.Index, with state: ModuleState, key: AnyHashable
  ) -> ModuleContext {
-  ModuleContext.cache[key] = index.element.context(from: index, state: state)
-  let context = ModuleContext.cache[key].unsafelyUnwrapped
+  guard state.mainContext != .shared else {
+   let context = index.element.context(from: index, state: state)
+   state.mainContext = context
+   return context
+  }
+  let context = index.element.context(from: index, state: state)
+  state.mainContext.cache[key] = context
   index.element.assign(to: context)
   return context
  }
 }
 
 @_spi(ModuleReflection)
+@Reflection(unsafe)
 public extension ModuleState {
  static func initialize<A: Module>(with module: A) -> ModuleState {
+  let initialState = ModuleState()
+
   var state: ModuleState {
    get { Reflection.states[A._mangledName].unsafelyUnwrapped }
    set { Reflection.states[A._mangledName] = newValue }
   }
 
-  state = ModuleState()
+  state = initialState
 
   let values = withUnsafeMutablePointer(to: &state.values) { $0 }
   let indices = withUnsafeMutablePointer(to: &state.indices) { $0 }
@@ -215,7 +220,11 @@ public extension ModuleState {
    indicesPointer: &indices.pointee
   )
 
-  indices.pointee[0].step(state.recurse)
+  let index = indices.pointee[0]
+
+  initialState.mainContext = .cached(index, with: initialState, key: index.key)
+
+  index.step(state.recurse)
 
   return state
  }
@@ -236,8 +245,4 @@ public extension ModuleState.Index {
  }
 
  var key: Int { id.hashValue }
-
- var context: ModuleContext? {
-  ModuleContext.cache[self.key]
- }
 }

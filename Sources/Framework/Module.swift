@@ -50,19 +50,18 @@ public extension Module {
  @inlinable
  mutating func mutatingCallWithContext(id: AnyHashable? = nil) async throws {
   let id = id ?? AnyHashable(id)
-  let shouldUpdate = Reflection.states[id] != nil
+  let shouldUpdate = await Reflection.states[id] != nil
 
   if !shouldUpdate {
-   Reflection.cacheIfNeeded(self, id: id)
+   await Reflection.cacheIfNeeded(self, id: id)
   }
 
-  let index = Reflection.states[id].unsafelyUnwrapped.indices[0]
+  let index = await Reflection.states[id].unsafelyUnwrapped.indices[0]
   let context = ModuleContext.cache[index.key]
    .unsafelyUnwrapped
 
   if shouldUpdate {
    await context.update()
-   try await context.updateTask?.wait()
   }
 
   try await context.callTasks()
@@ -70,24 +69,22 @@ public extension Module {
  }
 
  @_spi(ModuleReflection)
- @ModuleContext
  @_disfavoredOverload
  @inlinable
  func callWithContext(id: AnyHashable? = nil) async throws {
   let id = id ?? AnyHashable(id)
-  let shouldUpdate = Reflection.states[id] != nil
+  let shouldUpdate = await Reflection.states[id] != nil
 
   if !shouldUpdate {
-   Reflection.cacheIfNeeded(self, id: id)
+   await Reflection.cacheIfNeeded(self, id: id)
   }
 
-  let index = Reflection.states[id].unsafelyUnwrapped.indices[0]
+  let index = await Reflection.states[id].unsafelyUnwrapped.indices[0]
   let context = ModuleContext.cache[index.key]
    .unsafelyUnwrapped
 
   if shouldUpdate {
-   context.state.update(context)
-   try await context.updateTask?.value
+   await context.state.update(context)
   }
 
   try await context.callTasks()
@@ -133,7 +130,7 @@ public extension Module where VoidFunction == Never {
 // MARK: - Default Modules
 public struct EmptyModule: Module, ExpressibleAsEmpty {
  public typealias Body = Never
- public static var empty = Self()
+ public static let empty = Self()
  public var isEmpty: Bool { true }
  public init() {}
 }

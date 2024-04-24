@@ -4,38 +4,37 @@ public protocol ContextModule: Module {
 
 @_spi(ModuleReflection)
 extension ContextModule {
+ @Reflection(unsafe)
  @inlinable
  unowned static var state: ModuleState {
-  Reflection.cacheIfNeeded(Self(), id: Self._mangledName)
+  Reflection.cacheIfNeeded(Self(), id: _mangledName)
  }
- 
+
  @usableFromInline
  static var index: ModuleIndex { state.indices[0] }
 }
 
 public extension ContextModule {
- unowned static var context: ModuleContext {
+ @usableFromInline
+ internal unowned static var context: ModuleContext {
   ModuleContext.cache[index.key]!
  }
 
- @ModuleContext
  @inlinable
  func callContext() {
   Self.context.callAsFunction()
  }
 
- @ModuleContext
  @inlinable
  func cancelContext() {
-  Self.context.cancel()
+  Task { await Self.context.cancel() }
  }
 
  @inlinable
  static func updateContext() {
-  context.updateTask = Task { @ModuleContext in context.update() }
+  Task { await context.update() }
  }
 
- @ModuleContext 
  @discardableResult
  @inlinable
  mutating func call<Result>(action: (inout Self) -> Result) -> Result {
@@ -53,6 +52,7 @@ public extension ContextModule {
   Self.context.objectWillChange
  }
 }
+
 #elseif os(WASI) && canImport(TokamakDOM) && canImport(OpenCombine)
 import OpenCombine
 public extension ContextModule {

@@ -18,13 +18,12 @@ struct TestContext: Testable {
    let state = ModuleState.initialize(with: Self())
    let index = try state.indices.first.throwing()
    let value = try (index.element as? Self).throwing()
-   let key = index.key
-   let context = try ModuleContext.cache[key].throwing()
+   let context = state.mainContext
 
-   Perform.Async("Modify State & Context") { @ModuleContext in
+   Perform.Async("Modify State & Context") { 
     value.should = false
     // context must be updated or called before reflecting changes to `void`
-    context.state.update(context)
+    await context.state.update(context)
    }
 
    Test("Check Context & Structure") {
@@ -36,16 +35,16 @@ struct TestContext: Testable {
     }
 
     // assert that the indexed retained it's context
-    Assert("Retained Context") { @ModuleContext in !value.should }
+    Assert("Retained Context", !value.should)
 
-    Perform.Async { @ModuleContext in
+    Perform.Async { 
      value.should = true
-     context.state.update(context)
+     await context.state.update(context)
      try await context.callTasks()
     }
 
     // assert that main module's void was updated
-    Assert("Modified Echo") { @ModuleContext in
+    Assert("Modified Echo") {
      var next = try index.first(where: { $0 is Echo }).throwing()
      // find the first string value of Echo
      let previousStr = try ((next as? Echo)?.items.first as? String)
@@ -54,7 +53,7 @@ struct TestContext: Testable {
      value.should = false
 
      // must update context after modifying properties
-     context.state.update(context)
+     await context.state.update(context)
 
      next = try index.first(where: { $0 is Echo }).throwing()
 

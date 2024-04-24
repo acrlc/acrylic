@@ -10,13 +10,13 @@ open class Modular {
  public static func buildBlock<Result: Sendable>(
   _ action: @autoclosure @escaping () throws -> Result
  ) -> Perform<EmptyID, Result> {
-  Perform(action: action)
+  Perform(action: { try action() })
  }
 
  public static func buildBlock<Result: Sendable>(
-  _ action: @autoclosure @escaping () async throws -> Result
+  _ action: @Sendable @autoclosure @escaping () async throws -> Result
  ) async -> Perform<EmptyID, Result>.Async {
-  Perform.Async(action: action)
+  Perform.Async(action: { try await action() })
  }
 
  public static func buildBlock<A: Module>(_ module: A) -> A { module }

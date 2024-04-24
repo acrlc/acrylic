@@ -7,9 +7,8 @@ struct TestAsyncContext: Tests {
  @Context
  private var throwError: Bool = false
 
- @ModuleContext
  @discardableResult
- func defect() async -> Bool {
+ func defect() -> Bool {
   throwError = true
   should = false
   return true
@@ -19,7 +18,7 @@ struct TestAsyncContext: Tests {
   if should {
    Echo("\nSuccess!\n", color: .green, style: [.bold, .underlined])
   } else {
-   Perform.Async("defect", action: defect)
+   Perform.Async("defect", action: { defect() })
    Echo("\nFailure!\n", color: .extended(11), style: [.bold, .underlined])
   }
  }
@@ -29,16 +28,15 @@ struct TestAsyncContext: Tests {
    let state = ModuleState.initialize(with: Self())
    let index = try state.indices.first.throwing()
    let value = try (index.element as? Self).throwing()
-   let key = index.key
-   let context = try ModuleContext.cache[key].throwing()
+   let context = state.mainContext
 
-   Perform.Async("Perform & Cancel Tasks") { @ModuleContext in
+   Perform.Async("Perform & Cancel Tasks") {
     value.should = false
     // call tasks stored on context
     Task.detached {
      try await context.callAsFunction()
     }
-    context.cancel()
+    await context.cancel()
     // check if tasks were cancelled (could throw if performance deviates)
     try (!context.isRunning).throwing()
     value.should = true
@@ -49,8 +47,8 @@ struct TestAsyncContext: Tests {
    Assert("Structure Update", !value.throwError)
 
    Perform.Async("Update Context") {
-    await value.defect()
-    try (!context.isRunning).throwing()
+    value.defect()
+    try await context.waitForAll()
    }
 
    // assert that the module context was updated to false
@@ -59,20 +57,24 @@ struct TestAsyncContext: Tests {
    Assert("Structure Update", value.throwError)
 
    Test("Assert Context Retained w/ Results") {
-    Identity { @ModuleContext in
+    Identity("Results == [true]") {
      try await state.callAsFunction(context)
 
      let results =
-      try context.results.wrapped.throwing(reason: "results are empty")
+      try await context.results.wrapped.throwing(reason: "results are empty")
 
      let defectiveIndex =
       try index.index(where: { $0.id as? String == "defect" })
        .throwing(reason: "couldn't find value with id: defect")
 
-     let key = defectiveIndex.key
-     return try (results[key] as? [Bool])
-      .throwing(reason: "results not returned")
-    } == [true]
+     let key = AnyHashable(defectiveIndex.key)
+     return try (
+      results.values.first(
+       where: { $0.contains(where: { $0.key == key }) }
+      )?[key] as? Bool
+     )
+     .throwing(reason: "results not returned")
+    } == true
    }
   }
  }

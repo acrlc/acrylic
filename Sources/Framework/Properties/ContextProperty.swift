@@ -32,13 +32,18 @@ public typealias DynamicProperties = [
  (label: String, keyPath: AnyKeyPath, property: any DynamicProperty)
 ]
 
+extension [(label: String, keyPath: AnyKeyPath, property: any DynamicProperty)]:
+ @unchecked Sendable {}
+
+extension AnyKeyPath: @unchecked Sendable {}
+
 public protocol ContextualProperty: DynamicProperty {
  var id: AnyHashable { get set }
  var context: ModuleContext { get }
  @inlinable
  mutating func initialize()
  @inlinable
- mutating func initialize(with context: ModuleContext)
+ mutating func initialize(with context: ModuleContext) async
 }
 
 public extension ContextualProperty {
@@ -62,22 +67,17 @@ public extension ContextualProperty {
 public struct
 ContextProperty<Value: Sendable>: @unchecked Sendable, ContextualProperty {
  public var id = AnyHashable(UUID())
- public unowned var context: ModuleContext = .shared {
-  didSet { move(from: oldValue, to: context) }
- }
+ public unowned var context: ModuleContext = .shared
 
  @usableFromInline
  var initialValue: Value?
 
  @inlinable
  public mutating func initialize() {
-  if let initialValue {
-   let id = id
-   if context.values.keys.contains(id) {
-    context.values[id] = initialValue
-    self.initialValue = nil
-   }
-  }
+//  if let initialValue {
+//   await context.values[id] = initialValue
+//   self.initialValue = nil
+//  }
  }
 
  @inlinable
@@ -92,7 +92,6 @@ ContextProperty<Value: Sendable>: @unchecked Sendable, ContextualProperty {
   self.context = context
  }
 
- @ModuleContext(unsafe)
  @inlinable
  public var wrappedValue: Value {
   get {
@@ -159,7 +158,6 @@ public extension ContextProperty {
   return try body()
  }
 
- @ModuleContext
  func callAsFunction(_ newValue: @escaping @autoclosure () -> Value = ()) {
   precondition(
    context != .shared,
@@ -181,7 +179,6 @@ import OpenCombine
 
 @MainActor
 public extension ContextProperty {
- @ModuleContext
  @discardableResult
  func state<A>(
   _ value: @escaping (inout Value) throws -> A
@@ -190,7 +187,6 @@ public extension ContextProperty {
   return try value(&wrappedValue)
  }
 
- @ModuleContext
  @discardableResult
  func callState<A>(
   _ value: @escaping (inout Value) throws -> A
@@ -202,20 +198,17 @@ public extension ContextProperty {
   return try value(&wrappedValue)
  }
 
- @ModuleContext
  func state(_ newValue: Value) {
   wrappedValue = newValue
   context.objectWillChange.send()
  }
 
- @ModuleContext
  func callState(_ newValue: Value) {
   wrappedValue = newValue
   callAsFunction()
   context.objectWillChange.send()
  }
 
- @ModuleContext
  func updateState() {
   context.objectWillChange.send()
  }
@@ -225,13 +218,12 @@ public extension ContextProperty {
 public extension ContextProperty {
  @inlinable
  @discardableResult
- func withUpdate<A>(
+ func withUpdate<A: Sendable>(
   _ body: @escaping () throws -> A
  ) async rethrows -> A {
   try body()
  }
 
- @ModuleContext
  @inlinable
  func update(
   _ newValue: @escaping @autoclosure () -> Value = ()
@@ -245,6 +237,5 @@ public extension Module {
 }
 
 extension ContextProperty: CustomStringConvertible {
- @ModuleContext(unsafe)
  public var description: String { String(describing: wrappedValue) }
 }

@@ -13,7 +13,6 @@ import TokamakDOM
 extension ModuleContext: OpenCombine.ObservableObject {}
 #elseif canImport(SwiftUI)
 import SwiftUI
-
 extension ModuleContext: Combine.ObservableObject {}
 #endif
 
@@ -114,20 +113,8 @@ public struct _StaticModuleAliasProperty
  #endif
 }
 
+@Reflection(unsafe)
 public extension _StaticModuleAliasProperty {
- @usableFromInline
- internal unowned static var state: ModuleState {
-  Reflection.states[A._mangledName].unsafelyUnwrapped
- }
-
- @usableFromInline
- internal static var index: ModuleIndex { state.indices[0] }
-
- @usableFromInline
- internal unowned static var context: ModuleContext {
-  ModuleContext.cache[index.key]!
- }
-
  init(
   wrappedValue: Value,
   _ keyPath: KeyPath<A, ContextProperty<Value>>, _ call: Bool = false
@@ -137,7 +124,6 @@ public extension _StaticModuleAliasProperty {
   let wrapper = A.shared[keyPath: keyPath]
   context = wrapper.context
   id = wrapper.id
-  self.wrappedValue = wrappedValue
  }
 
  init(_ keyPath: KeyPath<A, ContextProperty<Value>>, _ call: Bool = false) {
@@ -152,14 +138,14 @@ public extension _StaticModuleAliasProperty {
  init(_ keyPath: WritableKeyPath<A, Value>, _ call: Bool = false) {
   self.keyPath = keyPath
   Reflection.cacheOrCall(A.self, call: call)
-  context = Self.context
+  context = Reflection.states[A._mangledName]!.mainContext
  }
 
  @_disfavoredOverload
  init(_ type: A.Type, _ call: Bool = false) where Value == A {
   keyPath = \A.self
   Reflection.cacheOrCall(A.self, call: call)
-  context = Self.context
+  context = Reflection.states[A._mangledName]!.mainContext
  }
 }
 
@@ -177,14 +163,14 @@ public struct _ObservedModuleAliasProperty
  @usableFromInline
  let keyPath: WritableKeyPath<A, Value>
 
-#if canImport(SwiftUI) || canImport(TokamakDOM)
+ #if canImport(SwiftUI) || canImport(TokamakDOM)
  @ObservedObject
  var module: A = .shared
  #else
  unowned var module: A = .shared
  #endif
- 
- public unowned var context: ModuleContext = .shared
+
+ public var context: ModuleContext = .shared
 
  @inlinable
  public var wrappedValue: Value {
@@ -204,20 +190,9 @@ public struct _ObservedModuleAliasProperty
  #endif
 }
 
+
+@Reflection(unsafe)
 public extension _ObservedModuleAliasProperty {
- @usableFromInline
- internal unowned static var state: ModuleState {
-  Reflection.states[A._mangledName].unsafelyUnwrapped
- }
-
- @usableFromInline
- internal static var index: ModuleIndex { state.indices[0] }
-
- @usableFromInline
- internal unowned static var context: ModuleContext {
-  ModuleContext.cache[index.key]!
- }
-
  init(
   wrappedValue: Value,
   _ keyPath: KeyPath<A, ContextProperty<Value>>, _ call: Bool = false
@@ -227,7 +202,6 @@ public extension _ObservedModuleAliasProperty {
   let wrapper = A.shared[keyPath: keyPath]
   context = wrapper.context
   id = wrapper.id
-  self.wrappedValue = wrappedValue
  }
 
  init(_ keyPath: KeyPath<A, ContextProperty<Value>>, _ call: Bool = false) {
@@ -242,14 +216,14 @@ public extension _ObservedModuleAliasProperty {
  init(_ keyPath: WritableKeyPath<A, Value>, _ call: Bool = false) {
   self.keyPath = keyPath
   Reflection.cacheOrCall(A.self, call: call)
-  context = Self.context
+  context = Reflection.states[A._mangledName]!.mainContext
  }
 
  @_disfavoredOverload
  init(_ type: A.Type, _ call: Bool = false) where Value == A {
   keyPath = \A.self
   Reflection.cacheOrCall(A.self, call: call)
-  context = Self.context
+  context = Reflection.states[A._mangledName]!.mainContext
  }
 }
 
@@ -266,21 +240,21 @@ public struct _ObservedContextModuleAliasProperty
 <A: ContextModule, Value: Sendable>:
  @unchecked Sendable, ContextualProperty, DynamicProperty {
  public var id = AnyHashable(A._mangledName)
+ #if canImport(SwiftUI) || canImport(TokamakDOM)
+ @ObservedObject
+ public var context: ModuleContext = .shared
+ #else
+ public unowned var context: ModuleContext = .shared
+ #endif
+
  @usableFromInline
  let keyPath: WritableKeyPath<A, Value>
 
  @usableFromInline
  var module: A {
-  get { Self.index.element as! A }
-  nonmutating set { Self.index.element = newValue }
+  get { context.state.values[0] as! A }
+  nonmutating set { context.state.values[0] = newValue }
  }
-
-#if canImport(SwiftUI) || canImport(TokamakDOM)
- @ObservedObject
- public var context: ModuleContext = .shared
-#else
- public unowned var context: ModuleContext = .shared
-#endif
 
  @inlinable
  public var wrappedValue: Value {
@@ -300,52 +274,39 @@ public struct _ObservedContextModuleAliasProperty
  #endif
 }
 
+@Reflection(unsafe)
 public extension _ObservedContextModuleAliasProperty {
- @usableFromInline
- internal unowned static var state: ModuleState {
-  Reflection.states[A._mangledName].unsafelyUnwrapped
- }
-
- @usableFromInline
- internal static var index: ModuleIndex { state.indices[0] }
-
- @usableFromInline
- internal unowned static var context: ModuleContext {
-  ModuleContext.cache[index.key]!
- }
-
- init(
-  wrappedValue: Value,
-  _ keyPath: KeyPath<A, ContextProperty<Value>>, _ call: Bool = false
- ) {
-  self.keyPath = keyPath.appending(path: \.wrappedValue)
-  Reflection.cacheOrCall(A(), id: A._mangledName, call: call)
-  let wrapper = (Self.index.element as! A)[keyPath: keyPath]
-  context = wrapper.context
-  id = wrapper.id
-  self.wrappedValue = wrappedValue
- }
-
- init(_ keyPath: KeyPath<A, ContextProperty<Value>>, _ call: Bool = false) {
-  Reflection.cacheOrCall(A(), id: A._mangledName, call: call)
-  self.keyPath = keyPath.appending(path: \.wrappedValue)
-  let wrapper = (Self.index.element as! A)[keyPath: keyPath]
-  context = wrapper.context
-  id = wrapper.id
- }
+// init(
+//  wrappedValue: Value,
+//  _ keyPath: KeyPath<A, ContextProperty<Value>>, _ call: Bool = false
+// ) {
+//  self.keyPath = keyPath.appending(path: \.wrappedValue)
+//  Reflection.cacheOrCall(A(), id: A._mangledName, call: call)
+//  let wrapper = (Self.index.element as! A)[keyPath: keyPath]
+//  context = wrapper.context
+//  id = wrapper.id
+// }
+//
+// init(_ keyPath: KeyPath<A, ContextProperty<Value>>, _ call: Bool = false) {
+//  Reflection.cacheOrCall(A(), id: A._mangledName, call: call)
+//  self.keyPath = keyPath.appending(path: \.wrappedValue)
+//  let wrapper = (Self.index.element as! A)[keyPath: keyPath]
+//  context = wrapper.context
+//  id = wrapper.id
+// }
 
  @_disfavoredOverload
  init(_ keyPath: WritableKeyPath<A, Value>, _ call: Bool = false) {
-  self.keyPath = keyPath
   Reflection.cacheOrCall(A(), id: A._mangledName, call: call)
-  context = Self.context
+  //self.context = Reflection.states[A._mangledName]!.mainContext
+  self.keyPath = keyPath
  }
 
  @_disfavoredOverload
  init(_ type: A.Type, _ call: Bool = false) where Value == A {
-  keyPath = \A.self
   Reflection.cacheOrCall(A(), id: A._mangledName, call: call)
-  context = Self.context
+  //self.context = Reflection.states[A._mangledName]!.mainContext
+  keyPath = \A.self
  }
 }
 

@@ -18,14 +18,13 @@ extension Task: Operational {
  public var isRunning: Bool { !isCancelled }
 }
 
-public protocol AsyncOperation: Identifiable, Operational {
+public protocol AsyncOperation: Sendable, Identifiable, Operational {
  associatedtype Output: Sendable
  associatedtype Failure: Error
- associatedtype Operator: Tasks
  var priority: TaskPriority? { get }
  var detached: Bool { get }
  var task: Task<Output?, Failure>? { get }
- var `operator`: Operator? { get set }
+ var tasks: Tasks? { get set }
  @inlinable
  @discardableResult
  func callAsFunction() async throws -> Output?
@@ -42,7 +41,7 @@ public struct AsyncTask
  @usableFromInline
  weak var context: ModuleContext?
 
- public var `operator`: Tasks? {
+ public var tasks: Tasks? {
   get {
    guard let context else {
     return nil
@@ -60,8 +59,10 @@ public struct AsyncTask
  @_spi(ModuleReflection)
  @inlinable
  public var task: Task<Output?, Error>? {
-  get { self.operator?.running[id] as? Task<Output?, any Error> }
-  nonmutating set { self.operator?.running[self.id] = newValue }
+  get {
+   tasks?.running[id] as? Task<Output?, any Error>
+  }
+  nonmutating set { self.tasks?.running[self.id] = newValue }
  }
 
  @_spi(ModuleReflection)
@@ -81,22 +82,22 @@ public struct AsyncTask
 
  public var isRunning: Bool {
   guard
-   let `operator`,
-   let id = `operator`.running.first(where: { $0.0 == self.id })?.0
+   let tasks,
+   let id = tasks.running.first(where: { $0.0 == self.id })?.0
   else {
    return false
   }
-  return `operator`.running[id].unsafelyUnwrapped.isRunning
+  return tasks.running[id].unsafelyUnwrapped.isRunning
  }
 
  /// Removes the task form the operator without cancelling
  public func remove(with context: ModuleContext) {
-  context.tasks.running[id] = nil
+  context.tasks.running.removeValue(for: id)
+  context.tasks.queue.removeValue(for: id)
 
-  if !context.tasks.isRunning {
+  if !context.isRunning {
    context.tasks.completed = true
   }
-  // context.tasks.queue[id] = nil
  }
 
  /// Cancels and removes a task from the operator
@@ -108,9 +109,9 @@ public struct AsyncTask
   let id = id
   if let task = context.tasks.running[id] {
    task.cancel()
-   context.tasks.running[id] = nil
+   context.tasks.running.removeValue(for: id)
   }
-  context.tasks.queue[id] = nil
+  context.tasks.queue.removeValue(for: id)
  }
 
  @_spi(ModuleReflection)
@@ -136,42 +137,25 @@ public struct AsyncTask
  }
 }
 
-import protocol Core.ExpressibleAsEmpty
-
 /// Manages tasks for a reflection to allow concurrent tasks
 /// that can pause or cancel when needed
-public final class Tasks: Identifiable, ExpressibleAsEmpty, Equatable {
- public static let shared: Tasks = .empty
-
- @_spi(ModuleReflection)
- public init(id: AnyHashable? = nil) {
-  self.id = id ?? AnyHashable(ObjectIdentifier(self))
- }
-
- public nonisolated lazy var id: AnyHashable = ObjectIdentifier(self)
- public static func == (lhs: Tasks, rhs: Tasks) -> Bool {
-  lhs.id == rhs.id
- }
-
- public static let empty = Tasks()
- public nonisolated var isEmpty: Bool {
-  self.queue.isEmpty && self.running.isEmpty
- }
-
+public actor Tasks: @unchecked Sendable {
+ public static let shared = Tasks()
  @usableFromInline typealias Key = AnyHashable
  public typealias DefaultTask = any AsyncOperation
  public typealias Queue = [(AnyHashable, DefaultTask)]
  public typealias Running = [(AnyHashable, Operational)]
 
- public var queue: Queue = .empty
- public var running: Running = .empty
+ public init() {}
+ public nonisolated lazy var queue: Queue = .empty
+ public nonisolated lazy var running: Running = .empty
 
  @inlinable
- public var keyTasks: [Operational] { self.running.map(\.1) }
+ public nonisolated var keyTasks: [Operational] { running.map(\.1) }
  @inlinable
- public var operations: [DefaultTask] { self.queue.map(\.1) }
+ public nonisolated var operations: [DefaultTask] { queue.map(\.1) }
 
- public var isRunning: Bool {
+ public nonisolated var isRunning: Bool {
   guard !completed else {
    return false
   }
@@ -179,15 +163,18 @@ public final class Tasks: Identifiable, ExpressibleAsEmpty, Equatable {
  }
 
  public func removeAll() {
-  self.queue.removeAll()
-  self.running.removeAll()
-  self.detached.removeAll()
+  queue.removeAll()
+  running.removeAll()
+  detached.removeAll()
  }
 
- public func cancel() {
-  self.task?.cancel()
-  for operation in self.keyTasks.reversed() {
-   operation.cancel()
+ public nonisolated lazy var cancellationTask: Task<(), Never>? = nil
+ public func cancel() async {
+  await cancellationTask?.wait()
+  cancellationTask = Task {
+   for operation in self.keyTasks.reversed() {
+    operation.cancel()
+   }
   }
  }
 
@@ -200,51 +187,60 @@ public final class Tasks: Identifiable, ExpressibleAsEmpty, Equatable {
 
  @inlinable
  func waitForAll() async throws {
-  try await self.wait()
+  try await wait()
 
-  for task in detached {
+  for (_, task) in detached {
    try await task.wait()
   }
  }
 
  @_spi(ModuleReflection)
- public var task: Task<[Sendable], Error>?
- public var detached = [Task<(), Error>]()
- public var completed: Bool = false
+ public nonisolated lazy var task: Task<[AnyHashable: Sendable], Error>? = nil
+ public nonisolated lazy var detached = [AnyHashable: Task<Sendable, Error>]()
+ public nonisolated lazy var completed: Bool = false
 
  @_spi(ModuleReflection)
  @inlinable
  @discardableResult
- public func callAsFunction() async throws -> [Sendable]? {
-  //assert(!self.isRunning)
-  self.completed = false
-  self.cancel()
+ public func callAsFunction() async throws -> [AnyHashable: Sendable]? {
+  await cancel()
 
-  let current = self.operations
-  self.removeAll()
+  let current = operations
+  removeAll()
+  completed = false
 
-  self.task = Task {
-   var results: [Sendable] = .empty
+  let task = Task<[AnyHashable: Sendable], Error> {
+   var results: [AnyHashable: Sendable] = .empty
 
    for task in current {
+    let id = task.id
+    let key = AnyHashable(id)
+
     if task.detached {
-     self.detached.append(Task { try await task() })
+     self.detached[key] =
+      Task { try await task() }
     }
     else {
-     try await results.append(task())
+     results[key] = try await task()
     }
    }
 
    return results
   }
-
-  return try await task?.value
+  self.task = task
+  return try await task.value
  }
 }
 
 // MARK: - Helper Extensions
 @_spi(ModuleReflection)
 public extension [(AnyHashable, any Operational)] {
+ mutating func removeValue(for key: AnyHashable) {
+  if let index = firstIndex(where: { $0.0 == key }) {
+   remove(at: index)
+  }
+ }
+
  subscript(_ key: AnyHashable) -> (any Operational)? {
   get { first(where: { $0.0 == key })?.1 }
   set {
@@ -263,6 +259,12 @@ public extension [(AnyHashable, any Operational)] {
 
 @_spi(ModuleReflection)
 public extension [(AnyHashable, any AsyncOperation)] {
+ mutating func removeValue(for key: AnyHashable) {
+  if let index = firstIndex(where: { $0.0 == key }) {
+   remove(at: index)
+  }
+ }
+
  subscript(_ key: AnyHashable) -> (any AsyncOperation)? {
   get { first(where: { $0.0 == key })?.1 }
   set {
@@ -337,3 +339,5 @@ extension Task where Failure == Never {
   await value
  }
 }
+
+extension AnyHashable: @unchecked Sendable {}

@@ -1,10 +1,9 @@
 @_spi(ModuleReflection) import Acrylic
 
-@available(macOS 13, iOS 16, *)
 struct TestTasks: Testable {
  let breakOnError = true
  var tests: some Testable {
-  Assertion("Tasks run and return results") {
+  Assertion("Tasks run and return results") { 
    let tasks = Tasks()
 
    // test normal operation
@@ -31,7 +30,7 @@ struct TestTasks: Testable {
     })
    )
 
-   let results = try await tasks()?._validResults
+   let results = try await tasks()?.values.map { $0 }._validResults
 
    return try !tasks.isRunning && (results as? [Int]).throwing() == [15]
   }

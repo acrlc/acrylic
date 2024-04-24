@@ -34,20 +34,6 @@ public extension Testable {
     module.idString
    }
 
-   if isTest {
-    try await test.setUp()
-    if !test.silent {
-     if let label {
-      print(
-       "\n[ \(label, style: .bold) ]",
-       "\("starting", color: .cyan)",
-       "\(name, color: .cyan, style: .bold)",
-       "❖"
-      )
-     }
-    }
-   }
-
    let endTime: String
 
    var endMessage: String {
@@ -56,29 +42,59 @@ public extension Testable {
    }
 
    do {
+    func setUpTest() async throws {
+     try await test.setUp()
+     if !test.silent {
+      if let label {
+       print(
+        "\n[ \(label, style: .bold) ]",
+        "\("starting", color: .cyan)",
+        "\(name, color: .cyan, style: .bold)",
+        "❖"
+       )
+      }
+     }
+    }
+
     if
      isTest,
      let modules = try await test.tests as? Modules {
+     try await setUpTest()
      timer.fire()
      try await self.test(modules, timer: &timer)
     } else {
      var valid = true
 
-     var result = try await {
-      if let asyncFunction = module as? any AsyncFunction {
-       timer.fire()
-       return try await asyncFunction.callAsyncFunction()
-      } else if let function = module as? any Function {
-       timer.fire()
-       return try await function.callAsFunction()
-      } else if isTest {
-       timer.fire()
-       return try await test.callAsTest()
+     var result: Sendable?
+
+     if let asyncFunction = module as? any AsyncFunction {
+      if asyncFunction.detached {
+       Task.detached {
+        try await asyncFunction.callAsFunction()
+       }
+       continue
       } else {
        timer.fire()
-       return try await module.callAsFunction()
+       result = try await asyncFunction.callAsyncFunction()
       }
-     }()
+     } else if let function = module as? any Function {
+      if function.detached {
+       Task.detached {
+        try await function.callAsFunction()
+       }
+       continue
+      } else {
+       timer.fire()
+       result = try await function.callAsFunction()
+      }
+     } else if isTest {
+      try await setUpTest()
+      timer.fire()
+      result = try await test.callAsTest()
+     } else {
+      timer.fire()
+      result = try await module.callAsFunction()
+     }
 
      endTime = timer.elapsed.description
 
@@ -112,7 +128,7 @@ public extension Testable {
       print(
        String.space,
        "\("return", style: .boldDim)",
-       "\("\(result)".readableRemovingQuotes, style: .bold) ",
+       "\("\(result!)".readableRemovingQuotes, style: .bold) ",
        terminator: .empty
       )
      } else {
@@ -152,7 +168,7 @@ public extension Testable {
  }
 
  @_disfavoredOverload
- func callAsTest() async throws {
+ mutating func callAsTest() async throws {
   var start = Timer()
   var started = false
 
@@ -334,7 +350,7 @@ public extension Test {
 #endif
 
 /// An assertion test that be combined with a result or called independently
-public struct Assertion<ID: Hashable, A, B>: AsyncFunction {
+public struct Assertion<ID: Hashable, A: Sendable, B: Sendable>: AsyncFunction {
  public var id: ID?
  let lhs: () async throws -> A
  let rhs: () async throws -> B
@@ -614,27 +630,33 @@ public struct Blackhole<ID: Hashable>: AsyncFunction {
 
 /// Executes a return funtion while minimizing compiler optimizations that could
 /// interfere with testing
-public struct Identity<ID: Hashable, Output>: AsyncFunction {
+public struct Identity<ID: Hashable, Output: Sendable>: AsyncFunction {
  public var id: ID?
  @inline(never)
- let result: () async throws -> Output
+ public let result: @Sendable () async throws -> Output
 
- public init(_ id: ID, _ result: @escaping () async throws -> Output) {
+ public init(
+  _ id: ID,
+  _ result: @Sendable @escaping () async throws -> Output
+ ) {
   self.id = id
   self.result = result
  }
 
- public init(_ result: @escaping () async throws -> Output)
+ public init(_ result: @Sendable @escaping () async throws -> Output)
   where ID == EmptyID {
   self.result = result
  }
 
- public init(_ id: ID, _ result: @escaping @autoclosure () throws -> Output) {
+ public init(
+  _ id: ID,
+  _ result: @Sendable @escaping @autoclosure () throws -> Output
+ ) {
   self.id = id
   self.result = result
  }
 
- public init(_ result: @escaping @autoclosure () throws -> Output)
+ public init(_ result: @Sendable @escaping @autoclosure () throws -> Output)
   where ID == EmptyID {
   self.result = result
  }
@@ -791,12 +813,13 @@ public extension TestProtocol {
 }
 #endif
 
-public struct Catch<ID: Hashable>: Testable {
+public struct Catch<ID: Hashable, Failure: Swift.Error & Sendable>:
+ @unchecked Sendable, Testable {
  public init(
   id: ID? = nil,
   silent: Bool = true,
-  @Modular modules: @escaping () async throws -> Modules,
-  @Modular onError: @escaping (any Error) async throws -> Modules
+  @Modular modules: @Sendable @escaping () async throws -> Modules,
+  @Modular onError: @Sendable @escaping (Failure) async throws -> Modules
  ) {
   self.id = id
   self.silent = silent
@@ -806,8 +829,8 @@ public struct Catch<ID: Hashable>: Testable {
 
  public init(
   silent: Bool = true,
-  @Modular modules: @escaping () async throws -> Modules,
-  @Modular onError: @escaping (any Error) async throws -> Modules
+  @Modular modules: @Sendable @escaping () async throws -> Modules,
+  @Modular onError: @Sendable @escaping (Failure) async throws -> Modules
  )
   where ID == EmptyID {
   self.silent = silent
@@ -818,22 +841,24 @@ public struct Catch<ID: Hashable>: Testable {
  public var id: ID?
  public var silent: Bool = true
  @Modular
- let modules: () async throws -> Modules
+ let modules: @Sendable () async throws -> Modules
  @Modular
- let onError: (Swift.Error) async throws -> Modules
+ let onError: (Failure) async throws -> Modules
 
  public var tests: Modules {
   get async throws {
    do {
     return try await modules()
-   } catch {
+   } catch let error as Failure {
     return try await onError(error)
+   } catch {
+    return [Throw(error)]
    }
   }
  }
 }
 
-public struct Throw<Failure: Error>: TestProtocol {
+public struct Throw<Failure: Swift.Error & Sendable>: TestProtocol {
  public var silent: Bool = true
  public init(_ error: Failure) {
   self.error = error

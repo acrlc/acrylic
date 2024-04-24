@@ -4,6 +4,7 @@ public protocol StaticModule: Module {
 
 @_spi(ModuleReflection)
 extension StaticModule {
+ @Reflection(unsafe)
  @inlinable
  unowned static var state: ModuleState {
   Reflection.cacheIfNeeded(self)
@@ -14,24 +15,21 @@ extension StaticModule {
 }
 
 public extension StaticModule {
- unowned static var context: ModuleContext {
-  ModuleContext.cache[index.key]!
- }
+ unowned static var context: ModuleContext { state.mainContext }
 
  @inlinable
  func callContext() {
   Self.context.callAsFunction()
  }
 
- @ModuleContext 
  @inlinable
  func cancelContext() {
-  Self.context.cancel()
+  Task { await Self.context.cancel() }
  }
 
  @inlinable
  static func updateContext() {
-  context.updateTask = Task { @ModuleContext in context.update() }
+  Task { await context.update() }
  }
 
  @discardableResult

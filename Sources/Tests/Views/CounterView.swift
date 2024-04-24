@@ -115,38 +115,45 @@ final class Counter: ObservableModule {
  }
 
  var task: Task<(), Error>?
+ 
  @MainActor
  func callAsFunction(_ amount: Int) {
-  state { $0.count += amount }
+   state { $0.count += amount }
   callContext()
-  print(String.newline + contextInfo.joined(separator: ", "))
+  Task { @Reflection in
+   print(String.newline + contextInfo().joined(separator: ", "))
+  }
  }
 }
 
 #endif
 
 extension Module {
- var contextInfo: [String] {
-  let cache = ModuleContext.cache
+ @Reflection(unsafe)
+ func contextInfo(_ id: AnyHashable? = nil) -> [String] {
+  let key = id ?? (
+   !(ID.self is Never.Type) && !(ID.self is EmptyID.Type) &&
+    String(describing: self.id).readableRemovingQuotes != "nil" ?
+    AnyHashable(self.id) : AnyHashable(
+     Swift._mangledTypeName(Self.self) ?? String(describing: Self.self)
+    )
+  )
+
+  let states = Reflection.states
+  let state = states[key].unsafelyUnwrapped
+  let context = state.mainContext
+  let cache = context.cache
   let contextInfo = "contexts: " + cache.count.description.readable
   let reflectionInfo = "reflections: " +
-   Reflection.states.count.description.readable
+   states.count.description.readable
   let tasksInfo = "tasks: " +
    cache.values.map {
     $0.tasks.keyTasks.count + $0.tasks.queue.count
    }
    .reduce(into: 0, +=).description.readable
-  let indexInfo = "indices: " +
-   Reflection.states.values
-   .map(\.indices.count)
-   .reduce(into: 0, +=)
-   .description.readable
+  let indexInfo = "indices: " + state.indices.count.description.readable
 
-  let valuesInfo = "values: " +
-   Reflection.states.values
-   .map(\.values.count)
-   .reduce(into: 0, +=)
-   .description.readable
+  let valuesInfo = "values: " + state.values.count.description.readable
 
   return [
    contextInfo,

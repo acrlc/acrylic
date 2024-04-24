@@ -1,38 +1,46 @@
 struct TestMapAsyncDetachedTasks: Testable {
  @Context
- var count: Int = .zero
+ var count: Int
  /// The expected output and mapped wait (in microseconds) for each task
  /// (exponential)
  let limit: Int
 
  var tests: some Testable {
-  Test("Map Async Detached Counter") {
-   Identity { @ModuleContext in count }
+  let expectation = Int(pow(Double(limit), 4))
 
-   Map(count: limit) { int in
-    Map(count: int * int) { int in
-     Map(count: int * int) { int in
-      Perform.Async(priority: .high, detached: true) { @ModuleContext in
-       try await sleep(for: .microseconds(int))
-       count += 1
+  Test("Map Async Detached Counter") {
+   Identity("Expectation", expectation)
+   Identity("Initial Count", count)
+
+   Map(count: limit) {
+    Map(count: limit) {
+     Map(count: limit) {
+      Map(count: limit) {
+       Perform.Async(id, priority: .high, detached: true) { 
+        count += 1
+       }
       }
      }
     }
    }
 
-   Perform.Async {
-    let context = {
-     let index = _count.context.index
-     let context = index.indices.compactMap(\.context)
-      .first(where: { $0.isRunning })
-     return context
-    }()
+   Identity("Addition Count", count) == expectation
 
-    try await context?.waitForAll()
+   Map(count: limit) {
+    Map(count: limit) {
+     Map(count: limit) {
+      Map(count: limit) {
+       Perform.Async(id, priority: .high, detached: true) { 
+        count -= 1
+       }
+      }
+     }
+    }
    }
 
-   Identity { @ModuleContext in count }
-   // == limit * (limit * limit) * (limit * limit)
+   Identity("Subtraction Count", count) == .zero
+   
+   Perform.Async("Set Expected Count") { count = expectation }
   }
  }
 }

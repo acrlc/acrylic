@@ -1,36 +1,44 @@
 import Core
 
 /// A context class for sharing and updating the state across modules
-@globalActor
-public actor ModuleContext: Identifiable,
+public actor ModuleContext: @unchecked Sendable, Identifiable,
  Equatable /* , Operational can't be met due to actor isolated `cancel()` */ {
  public static let shared = ModuleContext()
 
- public static var cache = [AnyHashable: ModuleContext]()
+ // TODO: Rely on self owned cache instead of shared
+ @_spi(ModuleReflection)
+ public nonisolated lazy var cache = [AnyHashable: ModuleContext]()
+ @_spi(ModuleReflection)
+ public static var cache: [AnyHashable: ModuleContext] {
+  get { shared.cache }
+  set { shared.cache = newValue }
+ }
 
- public
- nonisolated lazy var state: ModuleState = .unknown
+ public nonisolated
+ lazy var state: ModuleState = .unknown
  public nonisolated
  lazy var index = ModuleState.Index.start
 
  /// Stored values that are relevant to framework specific property wrappers
- @ModuleContext(unsafe)
  @usableFromInline
- lazy var values = [AnyHashable: Any]()
+ nonisolated lazy var values = [AnyHashable: Any]()
 
- public nonisolated
- lazy var tasks = Tasks(id: self.id)
+ public nonisolated lazy var tasks = Tasks()
 
- /// The currently executing update function
+ /// The currently executing background task
  public nonisolated
- lazy var updateTask: Task<(), Error>? = nil
+ lazy var backgroundTask: Task<(), Error>? = nil
+ /// The currently executing `tasks`
  public nonisolated
  lazy var calledTask: Task<(), Error>? = nil
 
+ /// The cancellation task
+ public nonisolated
+ lazy var cancellationTask: Task<(), Never>? = nil
+
  /// Results returned from calling `tasks`
  @_spi(ModuleReflection)
- @ModuleContext(unsafe)
- public lazy var results: [AnyHashable: Sendable] = .empty
+ public lazy var results: [AnyHashable: [AnyHashable: Sendable]] = .empty
 
  @_spi(ModuleReflection)
  public nonisolated
@@ -52,39 +60,47 @@ public actor ModuleContext: Identifiable,
  }
 
  init() {}
- deinit { self.calledTask?.cancel() }
+ deinit {
+  calledTask?.cancel()
+  backgroundTask?.cancel()
+  self.cache = .empty
+ }
 }
 
 public extension ModuleContext {
  /// Cancels all tasks in reverse including the subsequent and removes elements
- @ModuleContext
- func cancel() {
-  if let calledTask {
-   calledTask.cancel()
+ func cancel() async {
+  await cancellationTask?.wait()
+  cancellationTask = Task {
+   if let calledTask {
+    calledTask.cancel()
+   }
+
+   let baseIndices = index.indices
+
+   guard baseIndices.count > 1 else {
+    return
+   }
+   let indices = baseIndices.dropFirst()
+
+   for index in indices.reversed() {
+    let key = index.key
+    let context = cache[key].unsafelyUnwrapped
+    let offset = index.offset
+
+    await context.tasks.cancel()
+    index.base.remove(at: offset)
+    index.indices.remove(at: offset)
+
+    self.cache.removeValue(forKey: key)
+   }
+   await tasks.cancel()
   }
+ }
 
-  if let updateTask {
-   updateTask.cancel()
-  }
-
-  tasks.cancel()
-  let baseIndices = index.indices
-
-  guard baseIndices.count > 1 else {
-   return
-  }
-  let indices = baseIndices.dropFirst()
-
-  for index in indices.reversed() {
-   let key = index.key
-   let context = index.context.unsafelyUnwrapped
-   let offset = index.offset
-
-   context.tasks.cancel()
-   index.base.remove(at: offset)
-   index.indices.remove(at: offset)
-   ModuleContext.cache.removeValue(forKey: key)
-  }
+ func cancelAndWait() async {
+  await cancel()
+  await cancellationTask?.wait()
  }
 
  @inlinable
@@ -96,12 +112,13 @@ public extension ModuleContext {
   try await calledTask?.wait()
  }
 
+ @_spi(ModuleReflection)
  /// Allow all called tasks to finish, including detached tasks
  @inlinable
  func waitForAll() async throws {
   try await wait()
 
-  for task in tasks.detached {
+  for (_, task) in tasks.detached {
    try await task.wait()
   }
 
@@ -111,8 +128,8 @@ public extension ModuleContext {
    return
   }
 
-  for tasks in baseIndices.dropFirst().map(\.context!.tasks) {
-   for task in tasks.detached {
+  for tasks in baseIndices.dropFirst().map({ cache[$0.key]!.tasks }){
+   for (_, task) in tasks.detached {
     try await task.wait()
    }
   }
@@ -121,61 +138,60 @@ public extension ModuleContext {
 
 /* MARK: - Update Functions */
 public extension ModuleContext {
- @ModuleContext
  @inline(__always)
  func callAsFunction() async throws {
   try await state.callAsFunction(self)
  }
 
- @ModuleContext
  @inline(__always)
- func update() {
-  state.update(self)
+ func update() async {
+  await state.update(self)
  }
 
  nonisolated func callAsFunction(state: ModuleState) {
-  updateTask = Task { @ModuleContext in
+  backgroundTask?.cancel()
+  backgroundTask = Task {
+   self.backgroundTask?.cancel()
    try await state.callAsFunction(self)
   }
  }
 
  nonisolated func callAsFunction() {
-  updateTask = Task { @ModuleContext in
+  backgroundTask?.cancel()
+  backgroundTask = Task {
    try await state.callAsFunction(self)
   }
  }
 
  nonisolated func callAsFunction(prior: ModuleContext) {
-  updateTask = Task { @ModuleContext in
+  backgroundTask?.cancel()
+  backgroundTask = Task {
    try await state.callAsFunction(self)
-   state.update(prior)
+   await state.update(prior)
   }
  }
 }
 
 public extension ModuleContext {
- @ModuleContext
  func callTasks() async throws {
   #if DEBUG
   assert(!(calledTask?.isRunning ?? false))
   #endif
-  results = .empty
-
-  let baseIndex = index
   let task = Task {
-   self.results = .empty
-   self.results[baseIndex.key] = try await self.tasks()
-
+   let baseIndex = index
+   results = .empty
+   results[baseIndex.key] = try await tasks()
    let baseIndices = baseIndex.indices
    guard baseIndices.count > 1 else {
     return
    }
+   
    let elements = baseIndices.dropFirst().map {
-    ($0, $0.context.unsafelyUnwrapped)
+    ($0, self.cache[$0.key].unsafelyUnwrapped)
    }
 
-   for (index, context) in elements {
-    self.results[index.key] = try await context.tasks()
+   for (index, context) in elements where index.checkedElement != nil {
+    results[index.key] = try await context.tasks()
    }
   }
 

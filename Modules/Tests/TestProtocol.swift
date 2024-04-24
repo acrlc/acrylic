@@ -2,7 +2,7 @@
 
 /// A base protocol for calling modules as tests
 public protocol TestProtocol: Module {
- associatedtype Output
+ associatedtype Output: Sendable
  var testMode: TestMode { get }
  var breakOnError: Bool { get }
  var startMessage: String { get }
@@ -10,23 +10,23 @@ public protocol TestProtocol: Module {
  var testName: String? { get }
  var silent: Bool { get set }
  /// Performs before a test starts
- func setUp() async throws
+ mutating func setUp() async throws
  /// Performs when a test is finished
- func cleanUp() async throws
+ mutating func cleanUp() async throws
  /// Performs when a test completes without throwing
- func onCompletion() async throws
+ mutating func onCompletion() async throws
 
  @discardableResult
- func callAsTest() async throws -> Output
+ mutating func callAsTest() async throws -> Output
 }
 
 public extension TestProtocol {
  @_disfavoredOverload
- func setUp() async throws {}
+ func setUp() {}
  @_disfavoredOverload
- func cleanUp() async throws {}
+ func cleanUp() {}
  @_disfavoredOverload
- func onCompletion() async throws {}
+ func onCompletion() {}
  @_disfavoredOverload
  var testName: String? { idString }
  @_disfavoredOverload
