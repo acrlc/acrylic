@@ -110,29 +110,14 @@ public extension ModuleContext {
  @inlinable
  func wait() async throws {
   try await calledTask?.wait()
+  try await tasks.wait()
  }
 
- @_spi(ModuleReflection)
  /// Allow all called tasks to finish, including detached tasks
  @inlinable
  func waitForAll() async throws {
-  try await wait()
-
-  for (_, task) in tasks.detached {
-   try await task.wait()
-  }
-
-  let baseIndex = index
-  let baseIndices = baseIndex.indices
-  guard baseIndices.count > 1 else {
-   return
-  }
-
-  for tasks in baseIndices.dropFirst().map({ cache[$0.key]!.tasks }){
-   for (_, task) in tasks.detached {
-    try await task.wait()
-   }
-  }
+  try await calledTask?.wait()
+  try await tasks.waitForAll()
  }
 }
 
@@ -185,7 +170,7 @@ public extension ModuleContext {
    guard baseIndices.count > 1 else {
     return
    }
-   
+
    let elements = baseIndices.dropFirst().map {
     ($0, self.cache[$0.key].unsafelyUnwrapped)
    }

@@ -164,7 +164,7 @@ public struct _ObservedModuleAliasProperty
  let keyPath: WritableKeyPath<A, Value>
 
  #if canImport(SwiftUI) || canImport(TokamakDOM)
- @ObservedObject
+ @StateObject
  var module: A = .shared
  #else
  unowned var module: A = .shared

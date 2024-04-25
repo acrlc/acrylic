@@ -87,6 +87,15 @@ extension Tasks {
   let isTest = module is any TestProtocol
   lazy var test = (module as! any TestProtocol)
 
+  defer {
+   if isTest {
+    index.element = test
+   }
+   else {
+    index.element = module
+   }
+  }
+
   let name = module.typeConstructorName
   let baseName =
    context.index.start.element.typeConstructorName
@@ -216,12 +225,12 @@ extension Tasks {
    print(String.newline + message)
    print(endMessage + .newline)
 
+   if isTest {
+    try await test.cleanUp()
+   }
+
    if
     (isTest && test.testMode == .break) || state.baseTest.testMode == .break {
-    if isTest {
-     try await test.cleanUp()
-    }
-
     throw TestsError(message: message)
    }
   }

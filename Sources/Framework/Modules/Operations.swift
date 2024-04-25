@@ -179,14 +179,14 @@ public actor Tasks: @unchecked Sendable {
  }
 
  @inlinable
- func wait() async throws {
-  for task in keyTasks.map({ $0 as! Task<Sendable, Error> }) {
+ public func wait() async throws {
+  for task in keyTasks.map({ $0 as any Operational }) {
    try await task.wait()
   }
  }
 
  @inlinable
- func waitForAll() async throws {
+ public func waitForAll() async throws {
   try await wait()
 
   for (_, task) in detached {

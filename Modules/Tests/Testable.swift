@@ -34,7 +34,7 @@ public extension Testable {
     module.idString
    }
 
-   let endTime: String
+   var endTime: String
 
    var endMessage: String {
     "\("after", color: .cyan, style: .bold)" + .space +
@@ -136,6 +136,11 @@ public extension Testable {
      }
      print(endMessage)
     }
+
+    if isTest {
+     try await test.onCompletion()
+     try await test.cleanUp()
+    }
    } catch {
     endTime = timer.elapsed.description
 
@@ -143,6 +148,10 @@ public extension Testable {
 
     print(String.newline + message)
     print(endMessage + .newline)
+
+    if isTest {
+     try await test.cleanUp()
+    }
 
     if (isTest && test.testMode == .break) || testMode == .break {
      throw TestsError(message: message)
@@ -650,13 +659,13 @@ public struct Identity<ID: Hashable, Output: Sendable>: AsyncFunction {
 
  public init(
   _ id: ID,
-  _ result: @Sendable @escaping @autoclosure () throws -> Output
+  _ result: @escaping @autoclosure () throws -> Output
  ) {
   self.id = id
   self.result = result
  }
 
- public init(_ result: @Sendable @escaping @autoclosure () throws -> Output)
+ public init(_ result: @escaping @autoclosure () throws -> Output)
   where ID == EmptyID {
   self.result = result
  }
@@ -669,7 +678,7 @@ public struct Identity<ID: Hashable, Output: Sendable>: AsyncFunction {
 /* MARK: - Benchmarks Support */
 #if canImport(Benchmarks)
 import Benchmarks
-import Time
+@_exported import Time
 
 /// A module that benchmarks functions
 extension Benchmarks: TestProtocol {
