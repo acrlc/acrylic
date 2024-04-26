@@ -53,7 +53,8 @@ public extension ContextualProperty {
  mutating func initialize(with context: ModuleContext) {}
  @inlinable
  func move(from previous: ModuleContext, to context: ModuleContext) {
-  assert(previous != context)
+  assert(previous != context, "previous context cannot be assigned to property")
+  
   if previous != context {
    let id = id
    if context.values[id] != nil {
@@ -101,7 +102,7 @@ ContextProperty<Value: Sendable>: @unchecked Sendable, ContextualProperty {
    if let optional = context.values[id] as? Value?, let value = optional {
     return value
    } else {
-    precondition(
+    assert(
      initialValue != nil,
      "set \(Self.self) within an initializer or on the property"
     )
@@ -139,7 +140,7 @@ public extension ContextProperty {
 
 public extension ContextProperty {
  func callAsFunction() {
-  precondition(
+  assert(
    context != .shared,
    "cannot called shared context, states must be initialized before handling"
   )
@@ -150,7 +151,7 @@ public extension ContextProperty {
  func callResult<A>(
   _ body: @escaping () throws -> A
  ) rethrows -> A {
-  precondition(
+  assert(
    context != .shared,
    "cannot called shared context, states must be initialized before handling"
   )
@@ -159,7 +160,7 @@ public extension ContextProperty {
  }
 
  func callAsFunction(_ newValue: @escaping @autoclosure () -> Value = ()) {
-  precondition(
+  assert(
    context != .shared,
    "cannot called shared context, states must be initialized before handling"
   )

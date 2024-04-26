@@ -81,7 +81,7 @@ extension Tasks {
   removeAll()
   completed = false
 
-  let index = context.index
+  let index = await context.index
   let module = index.element
 
   let isTest = module is any TestProtocol
@@ -97,8 +97,8 @@ extension Tasks {
   }
 
   let name = module.typeConstructorName
-  let baseName =
-   context.index.start.element.typeConstructorName
+  let baseName = index.start.element.typeConstructorName
+  
   let label: String? = if isTest, let name = test.testName {
    name
   } else {

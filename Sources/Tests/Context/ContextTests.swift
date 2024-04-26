@@ -1,4 +1,5 @@
 @_spi(ModuleReflection) import Acrylic
+@_spi(TestModuleContext) import Acrylic
 
 // A module for testing the basic running and updating
 struct TestContext: Testable {
@@ -20,10 +21,10 @@ struct TestContext: Testable {
    let value = try (index.element as? Self).throwing()
    let context = state.mainContext
 
-   Perform.Async("Modify State & Context") { 
+   Perform.Async("Modify State & Context") {
     value.should = false
     // context must be updated or called before reflecting changes to `void`
-    await context.state.update(context)
+    await context.update()
    }
 
    Test("Check Context & Structure") {
@@ -37,10 +38,10 @@ struct TestContext: Testable {
     // assert that the indexed retained it's context
     Assert("Retained Context", !value.should)
 
-    Perform.Async { 
+    Perform.Async {
      value.should = true
-     await context.state.update(context)
-     try await context.callTasks()
+     await context.update()
+     try await context.callTestTasks()
     }
 
     // assert that main module's void was updated
@@ -53,7 +54,7 @@ struct TestContext: Testable {
      value.should = false
 
      // must update context after modifying properties
-     await context.state.update(context)
+     await context.update()
 
      next = try index.first(where: { $0 is Echo }).throwing()
 
@@ -64,5 +65,32 @@ struct TestContext: Testable {
     }
    }
   }
+ }
+}
+
+extension ModuleContext {
+ func callTestTasks() async throws {
+  assert(!(calledTask?.isRunning ?? false))
+  
+  let task = Task {
+   let baseIndex = index
+   results = .empty
+   results[baseIndex.key] = try await tasks()
+   let baseIndices = baseIndex.indices
+   guard baseIndices.count > 1 else {
+    return
+   }
+
+   let elements = baseIndices.dropFirst().map {
+    ($0, self.cache[$0.key].unsafelyUnwrapped)
+   }
+
+   for (index, context) in elements where index.checkedElement != nil {
+    results[index.key] = try await context.tasks()
+   }
+  }
+
+  calledTask = task
+  try await task.value
  }
 }

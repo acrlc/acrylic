@@ -84,7 +84,7 @@ public extension Module {
    .unsafelyUnwrapped
 
   if shouldUpdate {
-   await context.state.update(context)
+   await context.update()
   }
 
   try await context.callTasks()

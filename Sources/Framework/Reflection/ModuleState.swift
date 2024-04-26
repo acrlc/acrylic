@@ -23,24 +23,10 @@ open class ModuleState: @unchecked Sendable {
  public init() {}
 }
 
-@_spi(ModuleReflection)
-public extension ModuleState {
- @inlinable
- func callAsFunction(_ context: ModuleContext) async throws {
-  await context.cancelAndWait()
-  context.index.step(recurse)
-  try await context.callTasks()
- }
-
- @inlinable
- func update(_ context: ModuleContext) async {
-  await context.cancelAndWait()
-  context.index.step(recurse)
- }
-
- @inlinable
+extension ModuleState {
+ @usableFromInline
  @discardableResult
- internal func recurse(_ index: Index) -> Element? {
+ func recurse(_ index: Index) -> Element? {
   var module: Element {
    get { index.element }
    set { index.element = newValue }

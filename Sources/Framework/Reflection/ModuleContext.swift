@@ -14,10 +14,8 @@ public actor ModuleContext: @unchecked Sendable, Identifiable,
   set { shared.cache = newValue }
  }
 
- public nonisolated
- lazy var state: ModuleState = .unknown
- public nonisolated
- lazy var index = ModuleState.Index.start
+ public nonisolated lazy var state: ModuleState = .unknown
+ public var index = ModuleState.Index.start
 
  /// Stored values that are relevant to framework specific property wrappers
  @usableFromInline
@@ -123,45 +121,46 @@ public extension ModuleContext {
 
 /* MARK: - Update Functions */
 public extension ModuleContext {
- @inline(__always)
+ @inlinable
  func callAsFunction() async throws {
-  try await state.callAsFunction(self)
+  await cancelAndWait()
+  index.step(state.recurse)
+  try await callTasks()
  }
 
- @inline(__always)
+ @inlinable
  func update() async {
-  await state.update(self)
+  await cancelAndWait()
+  index.step(state.recurse)
  }
 
  nonisolated func callAsFunction(state: ModuleState) {
   backgroundTask?.cancel()
   backgroundTask = Task {
-   self.backgroundTask?.cancel()
-   try await state.callAsFunction(self)
+   backgroundTask?.cancel()
+   try await callAsFunction()
   }
  }
 
  nonisolated func callAsFunction() {
   backgroundTask?.cancel()
   backgroundTask = Task {
-   try await state.callAsFunction(self)
+   try await callAsFunction()
   }
  }
 
  nonisolated func callAsFunction(prior: ModuleContext) {
   backgroundTask?.cancel()
   backgroundTask = Task {
-   try await state.callAsFunction(self)
-   await state.update(prior)
+   try await callAsFunction()
+   await prior.update()
   }
  }
-}
 
-public extension ModuleContext {
- func callTasks() async throws {
-  #if DEBUG
+ @usableFromInline
+ internal func callTasks() async throws {
   assert(!(calledTask?.isRunning ?? false))
-  #endif
+  
   let task = Task {
    let baseIndex = index
    results = .empty
@@ -175,7 +174,7 @@ public extension ModuleContext {
     ($0, self.cache[$0.key].unsafelyUnwrapped)
    }
 
-   for (index, context) in elements where index.checkedElement != nil {
+   for (index, context) in elements {
     results[index.key] = try await context.tasks()
    }
   }

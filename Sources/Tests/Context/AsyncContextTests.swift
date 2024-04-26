@@ -58,7 +58,7 @@ struct TestAsyncContext: Tests {
 
    Test("Assert Context Retained w/ Results") {
     Identity("Results == [true]") {
-     try await state.callAsFunction(context)
+     try await context.callAsFunction()
 
      let results =
       try await context.results.wrapped.throwing(reason: "results are empty")

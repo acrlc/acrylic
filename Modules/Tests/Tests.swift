@@ -75,7 +75,7 @@ public extension Testable {
   let context = state.mainContext
 
   if shouldUpdate {
-   await context.state.update(context)
+   await context.update()
   }
 
   do {
