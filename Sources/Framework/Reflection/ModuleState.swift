@@ -288,12 +288,6 @@ public extension Module {
 // - MARK: Extensions
 @_spi(ModuleReflection)
 public extension ModuleIndex {
- @inline(__always)
- var typeName: String { element._typeName }
- @inline(__always)
- var mangledName: String { element._mangledName }
- @inline(__always)
- var objectID: ObjectIdentifier { element._objectID }
  var isStart: Bool {
   index == .zero && offset == .zero
  }

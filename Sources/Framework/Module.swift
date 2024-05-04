@@ -111,16 +111,6 @@ public extension Module {
  }
 
  @usableFromInline
- internal var _mangledName: String {
-  Swift._mangledTypeName(Self.self) ?? String(describing: Self.self)
- }
-
- @usableFromInline
- internal var _typeName: String {
-  Swift._typeName(Self.self)
- }
-
- @usableFromInline
  internal var _objectID: ObjectIdentifier {
   ObjectIdentifier(Self.self)
  }
