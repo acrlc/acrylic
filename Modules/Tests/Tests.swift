@@ -24,7 +24,7 @@ public extension Tests {
  mutating func onCompletion() async throws {}
  @_disfavoredOverload
  var testName: String? {
-  var typeName = typeConstructorName
+  var typeName = Self.typeConstructorName
   let suffixes = ["Tests", "Test"]
   
   for suffix in suffixes where typeName.hasSuffix(suffix) {

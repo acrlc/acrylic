@@ -33,7 +33,7 @@ public extension TestProtocol {
  var testName: String? { idString }
  @_disfavoredOverload
  var resolvedName: String {
-  testName?.wrapped ?? typeConstructorName
+  testName?.wrapped ?? Self.typeConstructorName
  }
 
  @_disfavoredOverload

@@ -322,7 +322,7 @@ extension ModuleIndex: CustomStringConvertible {
 
 @_spi(ModuleReflection)
 public extension Module {
- var typeConstructorName: String {
+ static var typeConstructorName: String {
   let name = Swift._typeName(Self.self)
   let bracketCount = name.count(for: "<")
 
@@ -374,6 +374,9 @@ public extension Module {
    return filtered(substrings)
   }
  }
+ 
+ @_transparent
+ var typeConstructorName: String { Self.typeConstructorName }
 
  var idString: String? {
   if isIdentifiable {
