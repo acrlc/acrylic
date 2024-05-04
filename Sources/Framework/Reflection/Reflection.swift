@@ -42,6 +42,7 @@ extension Reflection {
   stateType: B.Type
  ) -> B {
   let key = A._mangledName.hashValue
+  
   guard let state = states[key] as? B else {
    let initialState: B = .unknown
    var state: B {
@@ -73,6 +74,7 @@ extension Reflection {
   stateType: B.Type
  ) -> B {
   let key = A._mangledName.hashValue
+  
   guard let state = states[key] as? B else {
    let initialState: B = .unknown
    var state: B {
@@ -131,7 +133,8 @@ extension Reflection {
   module: some Module,
   stateType: A.Type
  ) async throws -> A {
-  let key = id.hashValue
+  let key = (id.base as? Int) ?? id.hashValue
+  
   guard let state = states[key] as? A else {
    let initialState: A = .unknown
    var state: A {
@@ -160,7 +163,8 @@ extension Reflection {
   module: some Module,
   stateType: A.Type
  ) -> A {
-  let key = id.hashValue
+  let key = (id.base as? Int) ?? id.hashValue
+  
   guard let state = states[key] as? A else {
    let initialState: A = .unknown
    var state: A {
@@ -189,7 +193,8 @@ extension Reflection {
   module: some Module,
   stateType: A.Type
  ) async throws -> A {
-  let key = id.hashValue
+  let key = (id.base as? Int) ?? id.hashValue
+  
   guard let state = states[key] as? A else {
    let initialState: A = .unknown
    var state: A {
@@ -218,8 +223,9 @@ extension Reflection {
   id: AnyHashable,
   module: some Module,
   stateType: A.Type
- ) async throws -> UnsafeMutablePointer<any Module> {
-  let key = id.hashValue
+ ) async throws -> ModulePointer {
+  let key = (id.base as? Int) ?? id.hashValue
+  
   guard let state = states[key] as? A else {
    let initialState: A = .unknown
    var state: A {
@@ -268,11 +274,12 @@ extension Reflection {
 public extension Module {
  func contextInfo(_ id: AnyHashable? = nil) -> [String] {
   let key = id?.hashValue ?? __key
-
   let states = Reflection.shared.states
+  
   guard let state = states[key] else {
    return .empty
   }
+  
   let context = state.context
   let cache = context.cache
 

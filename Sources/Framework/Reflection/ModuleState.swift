@@ -11,6 +11,9 @@ public protocol StateActor: Sendable {
 
 @_spi(ModuleReflection)
 public typealias ModuleIndex = UnsafeRecursiveNode<Modules>
+@_spi(ModuleReflection)
+public typealias ModulePointer = UnsafeMutablePointer<any Module>
+
 extension ModuleIndex: @unchecked Sendable {}
 
 // MARK: - Default Implementation
@@ -99,7 +102,8 @@ public extension StateActor {
   id: AnyHashable? = nil,
   with module: A
  ) async throws -> Self {
-  let key = id?.hashValue ?? module.__key
+  let key = (id?.base as? Int) ?? id?.hashValue ?? module.__key
+
   guard let state = Reflection.states[key] as? Self else {
    let initialState: Self = .unknown
    var state: Self {
