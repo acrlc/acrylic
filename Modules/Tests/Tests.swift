@@ -24,8 +24,19 @@ public extension Tests {
  mutating func onCompletion() async throws {}
  @_disfavoredOverload
  var testName: String? {
-  String(describing: Self.self)
-   .inserting(separator: .space, where: { $0.isUppercase })
+  var typeName = typeConstructorName
+  let suffixes = ["Tests", "Test"]
+  
+  for suffix in suffixes where typeName.hasSuffix(suffix) {
+   guard typeName != suffix else { return suffix }
+   
+   let startIndex = typeName.index(typeName.endIndex, offsetBy: -suffix.count)
+   
+   typeName.removeSubrange(startIndex...)
+   typeName.append(" \(suffix)")
+   break
+  }
+  return typeName
  }
 }
 
