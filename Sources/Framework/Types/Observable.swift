@@ -19,9 +19,8 @@ public extension ObservableModule {
 
  @MainActor
  @discardableResult
- @inlinable
- func callState<Result>(action: (Self) -> Result) -> Result {
-  defer { self.callContext() }
+ func callState<Result>(action: @Sendable (Self) -> Result) -> Result {
+  defer { Task { @Reflection in try await Self.callContext() } }
   objectWillChange.send()
   return action(self)
  }

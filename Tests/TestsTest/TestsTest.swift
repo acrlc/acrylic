@@ -1,27 +1,26 @@
-import Benchmarks
 import Tests
 import XCTest
 
 final class TestsTest: XCTestCase {
  func testAssert() async throws {
   // test assertion
-  try await (Assertion(true)).callAsyncFunction()
+  try await (Assertion(true)).callAsFunction()
   await XCTAssertThrow(
-   Assertion(false).callAsyncFunction,
+   Assertion(false).callAsFunction,
    message: "Asserted condition wasn't met"
   )
 
-  try await Assertion("Testing", ==, "Testing").callAsyncFunction()
-  try await Assertion("Testing", !=, "Passed").callAsyncFunction()
-  try await Assertion(0, ==, 0).callAsyncFunction()
-  try await Assertion(0, ==) { 0 }.callAsyncFunction()
-  try await Assertion(1, >) { 0 }.callAsyncFunction()
-  try await Assertion(-1, <) { 0 }.callAsyncFunction()
-  try await Assertion(1, >=) { 0 }.callAsyncFunction()
-  try await Assertion(-1, <=) { 0 }.callAsyncFunction()
+  try await Assertion("Testing", ==, "Testing").callAsFunction()
+  try await Assertion("Testing", !=, "Passed").callAsFunction()
+  try await Assertion(0, ==, 0).callAsFunction()
+  try await Assertion(0, ==) { 0 }.callAsFunction()
+  try await Assertion(1, >) { 0 }.callAsFunction()
+  try await Assertion(-1, <) { 0 }.callAsFunction()
+  try await Assertion(1, >=) { 0 }.callAsFunction()
+  try await Assertion(-1, <=) { 0 }.callAsFunction()
 
   await XCTAssertThrow(
-   Assertion(0, !=, 0).callAsyncFunction,
+   Assertion(0, !=, 0).callAsFunction,
    message:
    """
    \n\tExpected condition from \(0, style: .underlined) \
@@ -29,7 +28,7 @@ final class TestsTest: XCTestCase {
    """
   )
   await XCTAssertThrow(
-   Assertion(1, >, 99).callAsyncFunction,
+   Assertion(1, >, 99).callAsFunction,
    message:
    """
    \n\tExpected condition from \(1, style: .underlined) \
@@ -38,15 +37,15 @@ final class TestsTest: XCTestCase {
   )
 
   /// test Identity
-  try await (Identity(false) == false).callAsyncFunction()
-  try await (Identity(true) != false).callAsyncFunction()
-  try await (Identity(-1) < 0).callAsyncFunction()
-  try await (Identity(1) > 0).callAsyncFunction()
-  try await (Identity(-1) <= 0).callAsyncFunction()
-  try await (Identity(1) >= 0).callAsyncFunction()
+  try await (Identity(false) == false).callAsFunction()
+  try await (Identity(true) != false).callAsFunction()
+  try await (Identity(-1) < 0).callAsFunction()
+  try await (Identity(1) > 0).callAsFunction()
+  try await (Identity(-1) <= 0).callAsFunction()
+  try await (Identity(1) >= 0).callAsFunction()
 
   await XCTAssertThrow(
-   (Identity(1) > 99).callAsyncFunction,
+   (Identity(1) > 99).callAsFunction,
    message:
    """
    \n\tExpected condition from \(1, style: .underlined) \
@@ -56,7 +55,7 @@ final class TestsTest: XCTestCase {
 
   // test overrides
   await XCTAssertThrow(
-   Assertion(false, { condition, _ in condition }, {}).callAsyncFunction,
+   Assertion(false, { condition, _ in condition }, {}).callAsFunction,
    message: "Asserted condition wasn't met"
   )
  }
@@ -83,7 +82,7 @@ extension XCTest {
  }
 }
 
-struct TestModule: Tests {
+struct TestModule: Testable {
  var tests: some Testable {
   Assert("Basic Assertion", true)
   Identity("Basic Identity", "Hello") != "World!"

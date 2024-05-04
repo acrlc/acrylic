@@ -1,3 +1,5 @@
+import Tests
+
 struct TestRepeat: Testable {
  @Context
  var count: Int = 10

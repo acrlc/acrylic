@@ -1,185 +1,168 @@
 import Core
+import Foundation
 
 /// A context class for sharing and updating the state across modules
-public actor ModuleContext: @unchecked Sendable, Identifiable,
- Equatable /* , Operational can't be met due to actor isolated `cancel()` */ {
- public static let shared = ModuleContext()
+open class ModuleContext:
+ @unchecked Sendable, Identifiable, Equatable, Operational {
+ @_spi(ModuleReflection)
+ public static let unknown = ModuleContext()
+ @_spi(ModuleReflection)
+ public typealias Indices = ModuleIndex.Indices
 
- // TODO: Rely on self owned cache instead of shared
- @_spi(ModuleReflection)
- public nonisolated lazy var cache = [AnyHashable: ModuleContext]()
- @_spi(ModuleReflection)
- public static var cache: [AnyHashable: ModuleContext] {
-  get { shared.cache }
-  set { shared.cache = newValue }
+ public enum State: Int8, CaseIterable {
+  case initial = -1, active, idle, terminal
  }
 
- public nonisolated lazy var state: ModuleState = .unknown
- public var index = ModuleState.Index.start
+ @_spi(ModuleReflection)
+ @Reflection
+ public var state: State = .initial
+ @_spi(ModuleReflection)
+ public var actor: StateActor!
+ @_spi(ModuleReflection)
+ public var tasks = Tasks()
+ @_spi(ModuleReflection)
+ public var cache = [Int: ModuleContext]()
 
- /// Stored values that are relevant to framework specific property wrappers
- @usableFromInline
- nonisolated lazy var values = [AnyHashable: Any]()
-
- public nonisolated lazy var tasks = Tasks()
-
- /// The currently executing background task
- public nonisolated
- lazy var backgroundTask: Task<(), Error>? = nil
- /// The currently executing `tasks`
- public nonisolated
- lazy var calledTask: Task<(), Error>? = nil
-
- /// The cancellation task
- public nonisolated
- lazy var cancellationTask: Task<(), Never>? = nil
-
+ @_spi(ModuleReflection)
+ public var index: ModuleIndex = .start
+ @_spi(ModuleReflection)
+ public var modules: Modules = .empty
+ @_spi(ModuleReflection)
+ public var indices: Indices = .empty
+ @_spi(ModuleReflection)
+ public var values = [Int: Any]()
+  
+ /// - Note: Results feature not implemented but may return in some form
+ ///
+ // @_spi(ModuleReflection)
  /// Results returned from calling `tasks`
- @_spi(ModuleReflection)
- public lazy var results: [AnyHashable: [AnyHashable: Sendable]] = .empty
+ // var results = [Int: [Int: Sendable]]()
 
  @_spi(ModuleReflection)
- public nonisolated
- lazy var properties: DynamicProperties? = nil
+ public lazy var properties: DynamicProperties? = nil
+
+ @_spi(ModuleReflection)
+ public nonisolated(unsafe) init() {}
 
  /// Initializer used for indexing modules
  init(
-  index: ModuleIndex,
-  state: ModuleState,
+  index: consuming ModuleIndex,
+  actor: consuming some StateActor,
   properties: DynamicProperties? = nil
  ) {
+  self.actor = actor
   self.index = index
-  self.state = state
-  self.properties = properties
+  if let properties {
+   self.properties = properties
+  }
  }
 
  public static func == (lhs: ModuleContext, rhs: ModuleContext) -> Bool {
   lhs.id == rhs.id
  }
 
- init() {}
- deinit {
-  calledTask?.cancel()
-  backgroundTask?.cancel()
-  self.cache = .empty
- }
+ deinit { self.cancel() }
 }
 
+@_spi(ModuleReflection)
 public extension ModuleContext {
- /// Cancels all tasks in reverse including the subsequent and removes elements
- func cancel() async {
-  await cancellationTask?.wait()
-  cancellationTask = Task {
-   if let calledTask {
-    calledTask.cancel()
-   }
-
-   let baseIndices = index.indices
-
-   guard baseIndices.count > 1 else {
-    return
-   }
-   let indices = baseIndices.dropFirst()
-
-   for index in indices.reversed() {
-    let key = index.key
-    let context = cache[key].unsafelyUnwrapped
-    let offset = index.offset
-
-    await context.tasks.cancel()
-    index.base.remove(at: offset)
-    index.indices.remove(at: offset)
-
-    self.cache.removeValue(forKey: key)
-   }
-   await tasks.cancel()
+ @Reflection
+ func callTasks() async throws {
+  if tasks.queue.notEmpty {
+   try await tasks()
   }
- }
 
- func cancelAndWait() async {
-  await cancel()
-  await cancellationTask?.wait()
- }
-
- @inlinable
- nonisolated var isRunning: Bool { tasks.isRunning }
-
- /// Allow all called tasks to finish, excluding detached tasks
- @inlinable
- func wait() async throws {
-  try await calledTask?.wait()
-  try await tasks.wait()
+  if indices.count > 1 {
+   for index in indices[1...] {
+    let key = index.key
+    if let tasks = cache[key]?.tasks, tasks.queue.notEmpty {
+     try await tasks()
+    }
+   }
+  }
  }
 
  /// Allow all called tasks to finish, including detached tasks
- @inlinable
- func waitForAll() async throws {
-  try await calledTask?.wait()
-  try await tasks.waitForAll()
+ func wait() async throws {
+  try await tasks.wait()
+
+  for task in cache.map(\.1.tasks) {
+   try await task.wait()
+  }
+ }
+
+ nonisolated var isCancelled: Bool { tasks.isCancelled }
+
+ nonisolated(unsafe) func cancel() {
+  tasks.cancel()
+
+  for (_, context) in cache {
+   context.cancel()
+  }
+ }
+
+ /// Cancels all tasks including the subsequent, without removing queued
+ /// queued
+ ///
+ func cancel() async {
+  await tasks.cancel()
+  await cache.values.queue { context in await context.cancel() }
+ }
+
+ /// Cancels all tasks including the subsequent, while removing queued
+ /// tasks
+ ///
+ func invalidate() async {
+  await tasks.invalidate()
+  await cache.values.queue { context in await context.invalidate() }
+ }
+
+ nonisolated func invalidateSubrange() {
+   indices.removeSubrange(1...)
+   modules.removeSubrange(1...)
  }
 }
 
-/* MARK: - Update Functions */
+// MARK: - Public
+@Reflection(unsafe)
 public extension ModuleContext {
- @inlinable
  func callAsFunction() async throws {
-  await cancelAndWait()
-  index.step(state.recurse)
+  try await update()
   try await callTasks()
+  state = .idle
  }
 
- @inlinable
- func update() async {
-  await cancelAndWait()
-  index.step(state.recurse)
- }
-
- nonisolated func callAsFunction(state: ModuleState) {
-  backgroundTask?.cancel()
-  backgroundTask = Task {
-   backgroundTask?.cancel()
-   try await callAsFunction()
+ func update() async throws {
+  switch state {
+  case .active:
+   state = .terminal
+   try await actor.update()
+  case .idle:
+   await cancel()
+  case .initial:
+   state = .idle
+  case .terminal:
+   throw CancellationError()
   }
  }
 
- nonisolated func callAsFunction() {
-  backgroundTask?.cancel()
-  backgroundTask = Task {
-   try await callAsFunction()
-  }
+ func callAsFunction(prior: ModuleContext) async throws {
+  try await callAsFunction()
+  try await prior.update()
  }
 
- nonisolated func callAsFunction(prior: ModuleContext) {
-  backgroundTask?.cancel()
-  backgroundTask = Task {
-   try await callAsFunction()
-   await prior.update()
-  }
+ func callAsFunction(with state: ModuleContext.State) async throws {
+  self.state = state
+  try await callAsFunction()
  }
 
- @usableFromInline
- internal func callTasks() async throws {
-  assert(!(calledTask?.isRunning ?? false))
-  
-  let task = Task {
-   let baseIndex = index
-   results = .empty
-   results[baseIndex.key] = try await tasks()
-   let baseIndices = baseIndex.indices
-   guard baseIndices.count > 1 else {
-    return
-   }
+ func update(with state: ModuleContext.State) async throws {
+  self.state = state
+  try await update()
+ }
 
-   let elements = baseIndices.dropFirst().map {
-    ($0, self.cache[$0.key].unsafelyUnwrapped)
-   }
-
-   for (index, context) in elements {
-    results[index.key] = try await context.tasks()
-   }
-  }
-
-  calledTask = task
-  try await task.value
+ func cancel(with state: ModuleContext.State) async {
+  self.state = state
+  await cancel()
  }
 }

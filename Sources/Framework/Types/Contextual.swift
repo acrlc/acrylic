@@ -3,42 +3,81 @@ public protocol ContextModule: Module {
 }
 
 @_spi(ModuleReflection)
-extension ContextModule {
- @Reflection(unsafe)
- @inlinable
- unowned static var state: ModuleState {
-  Reflection.cacheIfNeeded(Self(), id: _mangledName)
+@Reflection
+public extension ContextModule {
+ static var state: ModuleState {
+  Reflection.cacheIfNeeded(
+   id: _mangledName, module: Self(), stateType: ModuleState.self
+  )
  }
 
- @usableFromInline
- static var index: ModuleIndex { state.indices[0] }
+ unowned static var context: ModuleContext { state.context }
+
+ static func callContext() async throws {
+  try await context.callAsFunction()
+ }
+
+ static func callContext(
+  with state: ModuleContext.State
+ ) async throws {
+  try await context.callAsFunction(with: state)
+ }
+
+ static func cancelContext(with state: ModuleContext.State) async {
+  await context.cancel(with: state)
+ }
+
+ static func updateContext() async throws {
+  try await context.update()
+ }
+
+ static func waitForContext() async throws {
+  try await context.wait()
+ }
 }
 
 public extension ContextModule {
- @usableFromInline
- internal unowned static var context: ModuleContext {
-  ModuleContext.cache[index.key]!
+ func callContext(
+  with state: ModuleContext.State = .active
+ ) async throws {
+  try await Self.callContext(with: state)
  }
-
- @inlinable
- func callContext() {
-  Self.context.callAsFunction()
+ 
+ func cancelContext(with state: ModuleContext.State = .idle) async {
+  await Self.cancelContext(with: state)
  }
-
- @inlinable
- func cancelContext() {
-  Task { await Self.context.cancel() }
+ 
+ func updateContext() async throws {
+  try await Self.updateContext()
  }
-
- @inlinable
- static func updateContext() {
-  Task { await context.update() }
+ 
+ func waitForContext() async throws {
+  try await Self.waitForContext()
  }
-
+ 
+ func callContext(with state: ModuleContext.State = .active) {
+  Task {
+   try await Self.callContext(with: state)
+  }
+ }
+ 
+ func cancelContext(with state: ModuleContext.State = .idle) {
+  Task {
+   await Self.cancelContext(with: state)
+  }
+ }
+ 
+ func updateContext() {
+  Task {
+   try await Self.updateContext()
+  }
+ }
+ 
  @discardableResult
- @inlinable
- mutating func call<Result>(action: (inout Self) -> Result) -> Result {
-  defer { self.callContext() }
+ mutating func call<Result>(
+  with state: ModuleContext.State = .active, action: (inout Self) -> Result
+ ) -> Result {
+  defer { self.callContext(with: state) }
   return action(&self)
  }
 }
@@ -46,8 +85,8 @@ public extension ContextModule {
 #if canImport(Combine) && canImport(SwiftUI)
 import Combine
 
+@Reflection
 public extension ContextModule {
- @inlinable
  var contextWillChange: ModuleContext.ObjectWillChangePublisher {
   Self.context.objectWillChange
  }
@@ -55,8 +94,9 @@ public extension ContextModule {
 
 #elseif os(WASI) && canImport(TokamakDOM) && canImport(OpenCombine)
 import OpenCombine
-public extension ContextModule {
- @inlinable
+
+@Reflection
+extension ContextModule {
  var contextWillChange: ModuleContext.ObjectWillChangePublisher {
   Self.context.objectWillChange
  }

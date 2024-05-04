@@ -1,5 +1,4 @@
-import Benchmarks
-import Time
+import Tests
 
 struct TestTimerView: Tests {
  var pressure: Size = 2

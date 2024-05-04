@@ -1,87 +1,68 @@
 @_spi(ModuleReflection) import Acrylic
 import struct Time.Timer
 
-@usableFromInline
-final class TestState<A: Testable>: ModuleState {
- override public init() { super.init() }
+@_spi(ModuleTests)
+public final class TestState<A: Testable>: StateActor, @unchecked Sendable {
+ public static var unknown: Self { Self() }
+ public let context = ModuleContext()
+ public var baseTest: A { context.index.element as! A }
  var timer = Timer()
- var baseTest: A { values[0] as! A }
 
- func recurse(_ index: Index) async throws -> Element? {
-  var module: Element {
+ public required init() {}
+ 
+ @Reflection
+ @discardableResult
+ public func update() async throws -> (any Module)? {
+  try await context.index.step(recurse)
+ }
+
+ @Reflection
+ @usableFromInline
+ func recurse(_ index: ModuleIndex) async throws -> (any Module)? {
+  var module: any Module {
    get { index.element }
    set { index.element = newValue }
   }
 
+  assert(
+   module.notEmpty, 
+   """
+   `\(module)` is empty, modules within `\(#function)` cannot be empty, \
+   especially when conforming to `ExpressibleAsEmpty`.
+   """
+  )
+  
   let key = index.key
-
-  let context =
-   mainContext.cache[key] ?? .cached(index, with: self, key: key)
+  let context = cached(index, key: key) ?? context
 
   if module.hasVoid || module is (any Testable) {
-   let void =
-    try await (module as? any Testable)?.tests as? Modules ??
-    module.void
-   let voids = (void as? Modules ?? [void])
-
-   try await index.rebase(voids, recurse)
+   if
+    let test =
+    try await (module as? any Testable)?.tests {
+    let tests = (test as? Modules ?? [test])
+    try await index.rebase(tests, recurse)
+   } else {
+    let void = try await module.void
+    let voids = (void as? Modules ?? [void])
+    try await index.rebase(voids, recurse)
+   }
   }
 
   return module.finalizeTest(with: index, context: context, key: key)
  }
 }
 
-extension ModuleState.Index {
- @discardableResult
- /// Start indexing from the current index
- func step(_ content: (Self) async throws -> Element?) async rethrows
-  -> Element? {
-  try await content(self)
- }
-
- /// Add base values to the current index
- func rebase(
-  _ elements: Base,
-  _ content: (Self) async throws -> Element?
- ) async rethrows {
-  for element in elements {
-   let projectedIndex = indices.endIndex
-   let projectedOffset = base.endIndex
-   base.append(element)
-
-   var projection: Self = .next(with: self)
-   projection.index = projectedIndex
-   projection.offset = projectedOffset
-
-   if try await content(projection) != nil {
-    indices.insert(projection, at: projectedIndex)
-   } else if projectedOffset < base.endIndex {
-    base.remove(at: projectedOffset)
-   }
-  }
- }
-}
-
-extension ModuleState.Index {
- var isStart: Bool {
-  index == .zero && offset == .zero
- }
-}
-
+@_spi(ModuleReflection)
+@Reflection
 extension Tasks {
- @_spi(ModuleReflection)
  @usableFromInline
  @discardableResult
  func callAsTest(
-  from context: ModuleContext, with state: TestState<some Testable>
- ) async throws -> [AnyHashable: Sendable]? {
-  await cancel()
-
-  let current = operations
-  removeAll()
-  completed = false
-
-  let index = await context.index
+  index: ModuleIndex,
+  context: ModuleContext,
+  with state: isolated TestState<some Testable>
+ ) async throws -> [Int: Sendable]? {
+  let current = queue.map(\.1)
   let module = index.element
 
   let isTest = module is any TestProtocol
@@ -98,7 +79,7 @@ extension Tasks {
 
   let name = module.typeConstructorName
   let baseName = index.start.element.typeConstructorName
-  
+
   let label: String? = if isTest, let name = test.testName {
    name
   } else {
@@ -137,29 +118,19 @@ extension Tasks {
   }
 
   do {
-   let task = Task {
-    var results: [AnyHashable: Sendable] = .empty
+   var results: [Int: Sendable] = .empty
 
-    state.timer.fire()
-    for task in current {
-     let id = task.id
-     let key = AnyHashable(id)
+   state.timer.fire()
+   for task in current {
+    let key = task.id
 
-     if task.detached {
-      self.detached[key] =
-       Task { try await task() }
-     }
-     else {
-      results[key] = try await task()
-     }
+    if task.detached {
+     detached[key] = Task { try await task() }
     }
-
-    return results
+    else {
+     results[key] = try await task()
+    }
    }
-
-   self.task = task
-
-   let results = try await task.value
 
    endTime = timer.elapsed.description
 
@@ -220,7 +191,8 @@ extension Tasks {
   } catch {
    endTime = timer.elapsed.description
 
-   let message = state.baseTest.errorMessage(with: label ?? name, for: error)
+   let baseTest = state.baseTest
+   let message = baseTest.errorMessage(with: label ?? name, for: error)
 
    print(String.newline + message)
    print(endMessage + .newline)
@@ -230,7 +202,7 @@ extension Tasks {
    }
 
    if
-    (isTest && test.testMode == .break) || state.baseTest.testMode == .break {
+    (isTest && test.testMode == .break) || baseTest.testMode == .break {
     throw TestsError(message: message)
    }
   }
@@ -238,97 +210,77 @@ extension Tasks {
  }
 }
 
+@_spi(ModuleTests)
+@Reflection
 extension ModuleContext {
+ @usableFromInline
  func callTests(with state: TestState<some Testable>) async throws {
-  let baseIndex = index
-  let task = Task {
-   let baseModule = baseIndex.element
-   results = .empty
-   self.results[baseIndex.key] =
-    try await self.callTestResults(baseModule, with: state)
+  defer { self.state = .idle }
+  self.state = .active
 
-   let baseIndices = baseIndex.indices
-   guard baseIndices.count > 1 else {
-    return
-   }
-
-   let indices = baseIndices.dropFirst().map {
-    ($0, self.cache[$0.key].unsafelyUnwrapped)
-   }
-
-   for (index, context) in indices {
-    self.results[index.key] =
-     try await context.callTestResults(index.element, with: state)
-   }
+  if tasks.queue.notEmpty {
+   try await callTestResults(index: index, with: state)
   }
 
-  calledTask = task
-  try await task.value
+  if indices.count > 1 {
+   for index in indices[1...] {
+    let key = index.key
+    if let context = cache[key], context.tasks.queue.notEmpty {
+     try await context.callTestResults(index: index, with: state)
+    }
+   }
+  }
  }
 
  @discardableResult
  func callTestResults(
-  _ value: any Module, with state: TestState<some Testable>
- ) async throws -> [AnyHashable: Sendable]? {
-  if let detachable = value as? Detachable, detachable.detached {
-   return try await tasks.callAsFunction()
+  index: ModuleIndex,
+  with state: TestState<some Testable>
+ ) async throws -> [Int: Sendable]? {
+  if let detachable = index.element as? Detachable, detachable.detached {
+   try await tasks.callAsFunction()
   }
 
-  return try await tasks.callAsTest(from: self, with: state)
+  return try await tasks.callAsTest(index: index, context: self, with: state)
  }
 }
 
-@Reflection(unsafe)
-extension Reflection {
+@_spi(ModuleTests)
+@Reflection
+public extension Reflection {
  /// Enables repeated calls from a base module using an id to retain state
- @usableFromInline
  @discardableResult
  static func cacheTestIfNeeded<A: Testable>(
-  _ module: A,
-  id: AnyHashable
- ) async throws -> Bool {
-  if states[id] == nil {
+  _ module: A, key: Int
+ ) async throws -> (Bool, TestState<A>) {
+  guard let state = states[key] as? TestState<A> else {
    let initialState = TestState<A>()
    unowned var state: TestState<A> {
-    get { states[id].unsafelyUnwrapped as! TestState<A> }
+    get { states[key].unsafelyUnwrapped as! TestState<A> }
     set {
-     states[id] = newValue
+     states[key] = newValue
     }
    }
 
+   initialState.bind([module])
+   let index = initialState.context.index
+
+   index.element.prepareContext(from: index, actor: initialState)
+   try await initialState.update()
+
    state = initialState
-
-   let values =
-    withUnsafeMutablePointer(to: &state.values) { $0 }
-   let indices =
-    withUnsafeMutablePointer(to: &state.indices) { $0 }
-
-   ModuleState.Index.bind(
-    base: [module],
-    basePointer: values,
-    indicesPointer: indices
-   )
-
-   let index = initialState.indices[0]
-
-   initialState.mainContext = .cached(index, with: initialState, key: index.key)
-
-   try await index.step(initialState.recurse)
-
-   return false
+   return (false, initialState)
   }
-  return true
+  return (true, state)
  }
 }
 
+@Reflection
 extension TestProtocol {
  func _finalizeTest(
-  with index: ModuleState.Index, context: ModuleContext, key: AnyHashable
+  with index: ModuleIndex, context: ModuleContext, key: Int
  ) -> any Module {
-  context.tasks.queue[key] = AsyncTask<Output, Never>(
-   id: key,
-   context: context
-  ) {
+  context.tasks[queue: key] = AsyncTask<Output, any Error>(id: key) {
    var copy = self
    defer { index.checkedElement = copy }
    return try await copy.callAsTest()
@@ -337,10 +289,11 @@ extension TestProtocol {
  }
 }
 
-public extension Module {
+@Reflection
+extension Module {
  @discardableResult
  func finalizeTest(
-  with index: ModuleState.Index, context: ModuleContext, key: AnyHashable
+  with index: ModuleIndex, context: ModuleContext, key: Int
  ) -> any Module {
   if
    self is (any Function) || self is (any AsyncFunction) ||
@@ -350,43 +303,5 @@ public extension Module {
    return test._finalizeTest(with: index, context: context, key: key)
   }
   return self
- }
-}
-
-/* MARK: - Test Helpers */
-public extension Task {
- @discardableResult
- func wait() async throws -> Success {
-  try await value
- }
-}
-
-public extension Task where Failure == Never {
- @discardableResult
- func wait() async -> Success {
-  await value
- }
-}
-
-extension Module {
- @usableFromInline
- var isIdentifiable: Bool {
-  !(ID.self is Never.Type) && !(ID.self is EmptyID.Type)
- }
-}
-
-extension ModuleState.Index: CustomStringConvertible {
- public var description: String {
-  if element.isIdentifiable {
-   let desc = String(describing: element.id).readableRemovingQuotes
-   if desc != "nil" {
-    return
-     """
-     \(element.typeConstructorName)\
-     [\(desc)](\(index), \(offset)) | \(range ?? 0 ..< 0)
-     """
-   }
-  }
-  return "\(element.typeConstructorName)(\(index), \(offset) | \(range ?? 0 ..< 0))"
  }
 }

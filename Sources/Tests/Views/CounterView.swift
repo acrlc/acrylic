@@ -5,6 +5,7 @@ import TokamakDOM
 #else
 import SwiftUI
 #endif
+import Time
 
 @available(macOS 13, iOS 16, *)
 struct CounterView: View {
@@ -94,73 +95,49 @@ struct CounterView: View {
 
 @available(macOS 13, iOS 16, *)
 // MARK: Counter Module
-final class Counter: ObservableModule {
+final class Counter: ObservableModule, @unchecked Sendable {
  static var shared = Counter()
  var count: Int = .zero
+ var timer = Timer()
  @Published
  var delay: Double = .zero
  var void: some Module {
-  if delay > .zero {
-   notify("sleeping for \(delay) seconds …", for: .note)
-  }
+  Perform.Async {
+   if delay > .zero {
+    notify("sleeping for \(delay) seconds …", for: .note)
+    try await sleep(for: .seconds(delay))
+   }
 
-  Sleep.Async(for: .seconds(delay))
+   switch count {
+   case .zero: print(0)
+   case 1...:
+    for int in 1 ... count {
+     print(int)
+    }
+   case ...(-1):
+    for int in count ... 0 {
+     print(-int)
+    }
+   default: break
+   }
 
-  switch count {
-  case .zero: Print(0)
-  case 1...: Map(1 ... count) { Print($0) }
-  case ...(-1): Map(count ... 0) { Print(-$0) }
-  default: ()
+   let endTime = timer.elapsed
+   let updateInterval = endTime.seconds - delay
+
+   print("~", Time(updateInterval))
   }
  }
 
  var task: Task<(), Error>?
- 
+
  @MainActor
  func callAsFunction(_ amount: Int) {
-   state { $0.count += amount }
-  callContext()
-  Task { @Reflection in
-   print(String.newline + contextInfo().joined(separator: ", "))
+  callState {
+   $0.count += amount
+   $0.timer.fire()
   }
+  print(String.newline + contextInfo().joined(separator: ", "))
  }
 }
 
 #endif
-
-extension Module {
- @Reflection(unsafe)
- func contextInfo(_ id: AnyHashable? = nil) -> [String] {
-  let key = id ?? (
-   !(ID.self is Never.Type) && !(ID.self is EmptyID.Type) &&
-    String(describing: self.id).readableRemovingQuotes != "nil" ?
-    AnyHashable(self.id) : AnyHashable(
-     Swift._mangledTypeName(Self.self) ?? String(describing: Self.self)
-    )
-  )
-
-  let states = Reflection.states
-  let state = states[key].unsafelyUnwrapped
-  let context = state.mainContext
-  let cache = context.cache
-  let contextInfo = "contexts: " + cache.count.description.readable
-  let reflectionInfo = "reflections: " +
-   states.count.description.readable
-  let tasksInfo = "tasks: " +
-   cache.values.map {
-    $0.tasks.keyTasks.count + $0.tasks.queue.count
-   }
-   .reduce(into: 0, +=).description.readable
-  let indexInfo = "indices: " + state.indices.count.description.readable
-
-  let valuesInfo = "values: " + state.values.count.description.readable
-
-  return [
-   contextInfo,
-   reflectionInfo,
-   tasksInfo,
-   indexInfo,
-   valuesInfo
-  ]
- }
-}

@@ -1,30 +1,35 @@
 @_spi(ModuleReflection) @_exported import Acrylic
-import Benchmarks
+import Command
 import Configuration
-@_exported import ModuleFunctions
-@_exported import Shell
-@_exported import Tests
-let notify = Configuration.default
+import Shell
+import Tests
 #if os(WASI)
 import TokamakDOM
 #elseif canImport(SwiftUI)
 import SwiftUI
 #endif
-import Command
-@_exported import struct Time.Size
 
 @main /// A test for the `Acrylic` framework
 struct AcrylicTests: TestsCommand {
- @Context
- var breakOnError = true
  @Option
  var pressure: Size = 5
  @Option
  var iterations: Int = 1
+
+ @Context
+ var breakOnError = true
  @Context
  var asyncMapCount: Int = .zero
+ @Context
+ var count: Int = .zero
+ @Context
+ var concurrentCount: Int = .zero
+
+ let start: Tick = .now
 
  mutating func setUp() {
+  notify("Startup time is", Tick.now.elapsedTime(since: start))
+
   if pressure.rawValue > 13 {
    print()
    notify(
@@ -46,35 +51,80 @@ struct AcrylicTests: TestsCommand {
  }
 
  var tests: some Testable {
-  Map(count: iterations) {
-   Test("Assertions / Break") {
-    Test("Switch TestMode") {
-     Assert(testMode == .break)
-     Perform.Async("Switch BreakOnError") {
-      breakOnError = false
-     }
-     Assert(testMode == .fall)
+  for _ in 0 ..< iterations {
+   Benchmarks("Normal Benchmarks") {
+    // note: not sure if these warmups do anything at all
+    // plus, time is linear and many examples are recursive
+    Measure("Sleep 111µs", warmup: 2, iterations: pressure * 11) {
+     usleep(111)
     }
+   }
+   Benchmark.Modules(
+    "Module Benchmarks", warmup: 2, iterations: pressure * 11
+   ) {
+    Perform("Sleep 111µs") { usleep(111) }
+   }
 
-    Identity(2 + 2) == 16
-    Echo("✔ Failure Asserted", color: .green, style: [.bold])
+   let propertiesBenchmarkSize: Size = pressure * 111
 
-    Assert(false)
-    Echo("✔ Failure Asserted", color: .green, style: [.bold])
-
-    Test("Reset TestMode") {
-     Assert(testMode == .fall)
-     Perform.Async("Reset BreakOnError") {
-      breakOnError = true
-     }
-     Assert(testMode == .break)
+   /// Measures the speed of reads and writes using `Context` properties
+   Benchmarks(
+    "Context Property Benchmarks",
+    onCompletion: {
+     notify("Current count is", count, with: .info)
     }
+   ) {
+    Measure(
+     "Read",
+     warmup: 2,
+     iterations: propertiesBenchmarkSize,
+     perform: { identity(count) }
+    )
+
+    Measure(
+     "Write += 1", warmup: 2, iterations: propertiesBenchmarkSize,
+     perform: { blackHole(count += 1) }
+    )
+   }
+
+   Benchmarks(
+    "Concurrent Property Benchmarks",
+    onCompletion: {
+     notify("Concurrent count is", concurrentCount, with: .info)
+    }
+   ) {
+    let concurrentIterations = 0 ..< count
+
+    Measure.Async(
+     "Concurrent Read",
+     iterations: pressure,
+     perform: {
+      await withTaskGroup(of: Void.self) { group in
+       for _ in concurrentIterations {
+        group.addTask { blackHole(concurrentCount) }
+       }
+       await group.waitForAll()
+      }
+     }
+    )
+
+    Measure.Async(
+     "Concurrent Write",
+     iterations: pressure,
+     perform: {
+      await withTaskGroup(of: Void.self) { group in
+       for _ in concurrentIterations {
+        group.addTask { blackHole(concurrentCount += 1) }
+       }
+       await group.waitForAll()
+      }
+     }
+    )
    }
 
    Test("Operational") {
     let limit = min(13, pressure.rawValue)
     TestTasks()
-
     TestMapAsyncDetachedTasks(
      count: $asyncMapCount,
      limit: limit
@@ -86,34 +136,11 @@ struct AcrylicTests: TestsCommand {
 
    Test("Contextual") {
     TestContext()
-    TestAsyncContext()
-   }
-
-   Test("Functional") {
-    TestMap()
-    TestRepeat()
-   }
-
-   Test("Benchmarking / Tests") {
-    Benchmark("Normal Benchmarks") {
-     // note: not sure if these warmups do anything at all
-     // plus, time is linear and many examples are recursive
-     Measure("Sleep 10000µs", warmup: 2, iterations: pressure * 33) {
-      usleep(10000)
-     }
-    }
-    Benchmark.Modules(
-     "Module Benchmarks", warmup: 2, iterations: pressure * 33
-    ) {
-     Perform("Sleep 10000µs") { usleep(10000) }
-    }
-
-    TestDurationExtensions(pressure: pressure)
+    TestAsyncContext(pressure: pressure)
    }
   }
  }
 
- @Reflection
  func onCompletion() async {
   print()
   notify(
@@ -123,8 +150,7 @@ struct AcrylicTests: TestsCommand {
   )
   #if os(WASI) || canImport(SwiftUI)
   // clear previous states / contexts
-  Reflection.states.removeAll()
-  ModuleContext.cache.removeAll()
+  Reflection.shared.states.removeAll()
   print()
 
   notify(
@@ -140,6 +166,8 @@ struct AcrylicTests: TestsCommand {
   #endif
  }
 }
+
+nonisolated(unsafe) let notify = Configuration.default
 
 #if os(WASI) || canImport(SwiftUI)
 @available(macOS 13, iOS 16, *)
@@ -167,4 +195,60 @@ public extension Size {
  static func * (lhs: Self, rhs: Self) -> Self {
   Self(rawValue: lhs.rawValue * rhs.rawValue)
  }
+
+ static func / (lhs: Self, rhs: Self) -> Self {
+  Self(rawValue: lhs.rawValue / rhs.rawValue)
+ }
 }
+
+#if os(Linux)
+// MARK: - Exports
+// Some versions of swift don't recognize exports from other modules using the
+// compiler macro `#if canImport(Framework)`
+// or it really depends on how the cache is built on macOS and Linux as well.
+// Any feedback or information on this would be helpful.
+public struct Echo: Function, @unchecked Sendable {
+ public let items: [String]
+ public let color: Chalk.Color?
+ public let background: Chalk.Color?
+ public let style: Chalk.Style?
+ public let separator: String
+ public let terminator: String
+ public var detached: Bool = true
+ public
+ init(
+  _ items: Any...,
+  color: Chalk.Color? = nil,
+  background: Chalk.Color? = nil,
+  style: Chalk.Style? = nil,
+  separator: String = " ", terminator: String = "\n"
+ ) {
+  self.items = items.map(String.init(describing:))
+  self.color = color
+  self.background = background
+  self.style = style
+  self.separator = separator
+  self.terminator = terminator
+ }
+
+ public func callAsFunction() {
+  echo(
+   items as [Any],
+   color: color, background: background, style: style,
+   separator: separator,
+   terminator: terminator
+  )
+ }
+}
+
+/// A test that calls `static func main()` with command and context support
+public protocol TestsCommand: Tests & AsyncCommand {}
+public extension TestsCommand {
+ mutating func main() async throws {
+  do { try await callAsTestFromContext() }
+  catch {
+   exit(Int32(error._code))
+  }
+ }
+}
+#endif

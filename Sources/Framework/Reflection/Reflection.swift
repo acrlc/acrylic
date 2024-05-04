@@ -2,202 +2,299 @@
 public actor Reflection:
  @unchecked Sendable, Identifiable, Equatable {
  public static let shared = Reflection()
- @Reflection
- public var states: [AnyHashable: ModuleState] = .empty
+ public nonisolated(unsafe) var states: [Int: StateActor] = .empty
 
  @Reflection
- public static var states: [AnyHashable: ModuleState] {
+ public static var states: [Int: StateActor] {
   get { shared.states }
   set { shared.states = newValue }
  }
+
+ @Reflection
+ static func run<Result>(
+  body: @escaping (isolated Reflection) throws -> Result
+ ) rethrows -> Result {
+  try Reflection.shared.assumeIsolated { reflection in
+   try body(reflection)
+  }
+ }
+
+// @Reflection
+// static func run<Result: Sendable>(
+//  body: @Sendable @Reflection @escaping () throws -> Result
+// ) async rethrows -> Result {
+//  try await Task(operation: body).wait()
+// }
 
  public static func == (lhs: Reflection, rhs: Reflection) -> Bool {
   lhs.id == rhs.id
  }
 }
 
+@_spi(ModuleReflection)
 @Reflection
 extension Reflection {
  /* FIXME: cache wrapped properties that are modules, as well */
  @usableFromInline
  @discardableResult
- static func cacheIfNeeded<A: StaticModule>(
-  _ moduleType: A.Type
- ) -> ModuleState {
-  guard let state = states[A._mangledName] else {
-   let initialState = ModuleState()
-   unowned var state: ModuleState {
-    get { states[A._mangledName].unsafelyUnwrapped }
+ static func cacheIfNeeded<A: StaticModule, B: StateActor>(
+  moduleType: A.Type,
+  stateType: B.Type
+ ) -> B {
+  let key = A._mangledName.hashValue
+  guard let state = states[key] as? B else {
+   let initialState: B = .unknown
+   var state: B {
+    get { states[key].unsafelyUnwrapped as! B }
     set {
-     states[A._mangledName] = newValue
+     states[key] = newValue
     }
    }
 
    // store state so it can be referenced from `Reflection.states`
+   initialState.bind([A.shared])
+   let index = initialState.context.index
+
+   index.element.prepareContext(from: index, actor: initialState)
+
+   Task {
+    try await initialState.update()
+   }
+
    state = initialState
-
-   let values =
-    withUnsafeMutablePointer(to: &state.values) { $0 }
-   let indices =
-    withUnsafeMutablePointer(to: &state.indices) { $0 }
-
-   ModuleIndex.bind(
-    base: [A.shared],
-    basePointer: values,
-    indicesPointer: indices
-   )
-
-   let index = initialState.indices[0]
-
-   initialState.mainContext = .cached(index, with: initialState, key: index.key)
-
-   index.step(initialState.recurse)
-
    return initialState
   }
   return state
  }
 
  @usableFromInline
- static func callIfNeeded<A: StaticModule>(_ moduleType: A.Type) {
-  if states[A._mangledName] == nil {
-   let initialState = ModuleState()
-   unowned var state: ModuleState {
-    get { states[A._mangledName].unsafelyUnwrapped }
+ static func callIfNeeded<A: StaticModule, B: StateActor>(
+  moduleType: A.Type,
+  stateType: B.Type
+ ) -> B {
+  let key = A._mangledName.hashValue
+  guard let state = states[key] as? B else {
+   let initialState: B = .unknown
+   var state: B {
+    get { states[key].unsafelyUnwrapped as! B }
     set {
-     states[A._mangledName] = newValue
+     states[key] = newValue
     }
    }
 
-   state = initialState
+   initialState.bind([A.shared])
 
-   let values =
-    withUnsafeMutablePointer(to: &state.values) { $0 }
-   let indices =
-    withUnsafeMutablePointer(to: &state.indices) { $0 }
+   let index = initialState.context.index
 
-   ModuleIndex.bind(
-    base: [A.shared],
-    basePointer: values,
-    indicesPointer: indices
-   )
+   index.element.prepareContext(from: index, actor: initialState)
 
-   let index = initialState.indices[0]
-
-   initialState.mainContext = .cached(index, with: initialState, key: index.key)
-
-   index.step(initialState.recurse)
-   initialState.mainContext.callAsFunction()
-  } else {
-   let context = states[A._mangledName].unsafelyUnwrapped.mainContext
-   if context.calledTask != nil {
-    context.callAsFunction()
+   Task { @Reflection in
+    try await initialState.update()
+    try await initialState.context.callTasks()
    }
+
+   state = initialState
+   return initialState
   }
+  let context = state.context
+
+  // if module was cached beforehand, but never called
+  if context.state == .initial {
+   context.state = .idle
+   Task { try await context.callAsFunction() }
+  }
+  return state
  }
 
  @inlinable
- static func cacheOrCall<A: StaticModule>(_ moduleType: A.Type, call: Bool) {
+ @discardableResult
+ static func cacheOrCall<A: StateActor>(
+  moduleType: (some StaticModule).Type,
+  stateType: A.Type,
+  call: Bool
+ ) -> A {
   if call {
-   Reflection.callIfNeeded(A.self)
+   Reflection.callIfNeeded(
+    moduleType: moduleType, stateType: stateType
+   )
   } else {
-   Reflection.cacheIfNeeded(A.self)
+   Reflection.cacheIfNeeded(
+    moduleType: moduleType, stateType: stateType
+   )
   }
  }
 
  @usableFromInline
  @discardableResult
- static func cacheIfNeeded(
-  _ module: some Module,
-  id: AnyHashable
- ) -> ModuleState {
-  if states[id] == nil {
-   let initialState = ModuleState()
-   unowned var state: ModuleState {
-    get { states[id].unsafelyUnwrapped }
+ static func cacheIfNeeded<A: StateActor>(
+  id: AnyHashable,
+  module: some Module,
+  stateType: A.Type
+ ) async throws -> A {
+  let key = id.hashValue
+  guard let state = states[key] as? A else {
+   let initialState: A = .unknown
+   var state: A {
+    get { states[key].unsafelyUnwrapped as! A }
     set {
-     states[id] = newValue
+     states[key] = newValue
+    }
+   }
+
+   initialState.bind([module])
+   let index = initialState.context.index
+
+   index.element.prepareContext(from: index, actor: initialState)
+
+   try await initialState.update()
+   state = initialState
+   return initialState
+  }
+  return state
+ }
+
+ @usableFromInline
+ @discardableResult
+ static func cacheIfNeeded<A: StateActor>(
+  id: AnyHashable,
+  module: some Module,
+  stateType: A.Type
+ ) -> A {
+  let key = id.hashValue
+  guard let state = states[key] as? A else {
+   let initialState: A = .unknown
+   var state: A {
+    get { states[key].unsafelyUnwrapped as! A }
+    set {
+     states[key] = newValue
     }
    }
 
    state = initialState
+   state.bind([module])
 
-   let values =
-    withUnsafeMutablePointer(to: &state.values) { $0 }
-   let indices =
-    withUnsafeMutablePointer(to: &state.indices) { $0 }
+   let index = state.context.index
+   index.element.prepareContext(from: index, actor: state)
 
-   ModuleIndex.bind(
-    base: [module],
-    basePointer: values,
-    indicesPointer: indices
-   )
-
-   let index = initialState.indices[0]
-
-   initialState.mainContext = .cached(index, with: initialState, key: index.key)
-
-   index.step(initialState.recurse)
-
-   return initialState
+   Task { try await state.update() }
+   return state
   }
-  return states[id].unsafelyUnwrapped
+  return state
+ }
+
+ @usableFromInline
+ @discardableResult
+ static func asyncCacheIfNeeded<A: StateActor>(
+  id: AnyHashable,
+  module: some Module,
+  stateType: A.Type
+ ) async throws -> A {
+  let key = id.hashValue
+  guard let state = states[key] as? A else {
+   let initialState: A = .unknown
+   var state: A {
+    get { states[key].unsafelyUnwrapped as! A }
+    set {
+     states[key] = newValue
+    }
+   }
+
+   state = initialState
+   state.bind([module])
+
+   let index = state.context.index
+   index.element.prepareContext(from: index, actor: state)
+
+   try await state.update()
+   return state
+  }
+  return state
  }
 
  /// Enables repeated calls from a base module using an id to retain state
  @discardableResult
  @usableFromInline
- static func call(
-  _ module: some Module,
-  id: AnyHashable
- ) -> UnsafeMutablePointer<any Module> {
-  if states[id] == nil {
-   let initialState = ModuleState()
-   unowned var state: ModuleState {
-    get { states[id].unsafelyUnwrapped }
+ static func call<A: StateActor>(
+  id: AnyHashable,
+  module: some Module,
+  stateType: A.Type
+ ) async throws -> UnsafeMutablePointer<any Module> {
+  let key = id.hashValue
+  guard let state = states[key] as? A else {
+   let initialState: A = .unknown
+   var state: A {
+    get { states[key].unsafelyUnwrapped as! A }
     set {
-     states[id] = newValue
+     states[key] = newValue
     }
    }
 
+   state.bind([module])
+   let index = initialState.context.index
+
+   index.element.prepareContext(from: index, actor: initialState)
+   try await initialState.update()
+   try await initialState.context.callTasks()
+
    state = initialState
-
-   let values =
-    withUnsafeMutablePointer(to: &state.values) { $0 }
-   let indices =
-    withUnsafeMutablePointer(to: &state.indices) { $0 }
-
-   ModuleIndex.bind(
-    base: [module],
-    basePointer: values,
-    indicesPointer: indices
-   )
-
-   let index = initialState.indices[0]
-
-   initialState.mainContext = .cached(index, with: initialState, key: index.key)
-
-   index.step(initialState.recurse)
-
-   ModuleContext.cache[index.key].unsafelyUnwrapped
-    .callAsFunction()
-
-   return withUnsafeMutablePointer(to: &index.element) { $0 }
-  } else {
-   let state = states[id].unsafelyUnwrapped
-   let index = state.indices[0]
-
-   state.mainContext.callAsFunction()
    return withUnsafeMutablePointer(to: &index.element) { $0 }
   }
+
+  try await state.context.callAsFunction()
+
+  let index = state.context.index
+  return withUnsafeMutablePointer(to: &index.element) { $0 }
  }
 
  @inlinable
- static func cacheOrCall(_ module: some Module, id: AnyHashable, call: Bool) {
+ static func cacheOrCall(
+  id: AnyHashable, module: some Module, stateType: (some StateActor).Type,
+  call: Bool
+ ) async throws {
   if call {
-   Reflection.call(module, id: id)
+   try await Reflection.call(id: id, module: module, stateType: stateType)
   } else {
-   Reflection.cacheIfNeeded(module, id: id)
+   try await Reflection.cacheIfNeeded(
+    id: id,
+    module: module,
+    stateType: stateType
+   )
   }
+ }
+}
+
+// MARK: - Module Extensions
+@_spi(ModuleReflection)
+public extension Module {
+ func contextInfo(_ id: AnyHashable? = nil) -> [String] {
+  let key = id?.hashValue ?? __key
+
+  let states = Reflection.shared.states
+  guard let state = states[key] else {
+   return .empty
+  }
+  let context = state.context
+  let cache = context.cache
+
+  let contextInfo = "contexts: " + cache.count.description.readable
+  let reflectionInfo = "reflections: " + states.count.description.readable
+  let tasksInfo = "tasks: " +
+   cache.map {
+    let tasks = $0.1.tasks
+    return tasks.running.count + tasks.queue.count
+   }
+   .reduce(into: 0, +=).description.readable
+
+  let index = context.index
+  let indexInfo = "indices: " + index.indices.count.description.readable
+  let valuesInfo = "values: " + index.base.count.description.readable
+
+  return [
+   contextInfo,
+   reflectionInfo,
+   tasksInfo,
+   indexInfo,
+   valuesInfo
+  ]
  }
 }

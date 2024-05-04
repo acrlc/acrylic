@@ -1,4 +1,6 @@
+@_spi(ModuleReflection) import Acrylic
 @_exported import Acrylic
+@_exported import Time
 
 /// A base protocol for calling modules as tests
 public protocol TestProtocol: Module {
@@ -33,6 +35,7 @@ public extension TestProtocol {
  var resolvedName: String {
   testName?.wrapped ?? typeConstructorName
  }
+
  @_disfavoredOverload
  @inlinable
  var silent: Bool { get { false } set {} }
@@ -98,78 +101,15 @@ public enum TestMode: ExpressibleByNilLiteral, ExpressibleByBooleanLiteral {
 extension [any Module]: TestProtocol {}
 
 public extension TestProtocol where Self: Function {
- @inline(__always)
  @discardableResult
  func callAsTest() async throws -> Output {
-  try await callAsFunction()
+  try callAsFunction()
  }
 }
 
 public extension TestProtocol where Self: AsyncFunction {
- @inline(__always)
  @discardableResult
  func callAsTest() async throws -> Output {
-  try await callAsyncFunction()
- }
-}
-
-extension Module {
- @inlinable
- var typeConstructorName: String {
-  var split =
-   Swift._typeName(Self.self).split(separator: ".").dropFirst()
-  if split.first == "Modular" {
-   split.removeFirst()
-  }
-
-  var offset = 0
-  for index in split.indices {
-   let adjustedIndex = offset + index
-   guard adjustedIndex < split.endIndex else {
-    break
-   }
-
-   var substring = split[adjustedIndex]
-   if substring.contains("<") {
-    if let splitIndex = substring.firstIndex(where: { $0 == "<" }) {
-     substring = substring[...splitIndex]
-     substring.removeLast()
-     split[adjustedIndex] = substring
-     offset += 1
-
-     var remaining = split[(adjustedIndex + offset)...]
-     remaining.remove(while: { !$0.hasSuffix(">") })
-     remaining.removeLast()
-     split.replaceSubrange((adjustedIndex + offset)..., with: remaining)
-    }
-   }
-  }
-
-  if split.count > 1, let last = split.last?.last, last == ">" {
-   split.removeLast()
-  }
-
-  return split.joined(separator: ".")
- }
-
- @inlinable
- var idString: String? {
-  if !(ID.self is EmptyID.Type), !(ID.self is Never.Type) {
-   let id: ID? = if let id = self.id as? (any ExpressibleByNilLiteral) {
-    nil ~= id ? nil : self.id
-   } else {
-    id
-   }
-
-   guard let id else {
-    return nil
-   }
-
-   let string = String(describing: id).readableRemovingQuotes
-   if !string.isEmpty, string != "nil" {
-    return string
-   }
-  }
-  return nil
+  try await callAsFunction()
  }
 }

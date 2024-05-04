@@ -1,6 +1,7 @@
 @_spi(ModuleReflection) import Acrylic
 import protocol Foundation.LocalizedError
-import struct Time.Timer
+import Time
+import Shell
 
 public protocol TestError: LocalizedError, CustomStringConvertible {}
 /// A testable environment
@@ -23,9 +24,11 @@ public extension Tests {
  mutating func onCompletion() async throws {}
  @_disfavoredOverload
  var testName: String? {
-  String(describing: Self.self).replacingOccurrences(of: "Tests", with: "")
+  String(describing: Self.self)
+   .inserting(separator: .space, where: { $0.isUppercase })
  }
 }
+
 
 public extension Testable {
  mutating func callAsTestFromContext(id: AnyHashable? = nil) async throws {
@@ -49,17 +52,14 @@ public extension Testable {
   // prepare the test before execution
   try await setUp()
 
-  let key = id ?? (
-   !(ID.self is Never.Type) && !(ID.self is EmptyID.Type) &&
-    String(describing: self.id).readableRemovingQuotes != "nil" ?
-    AnyHashable(self.id) : AnyHashable(
-     Swift._mangledTypeName(Self.self) ?? String(describing: Self.self)
-    )
-  )
+  let key = id?.hashValue ?? __key
 
-  var shouldUpdate = false
   do {
-   shouldUpdate = try await Reflection.cacheTestIfNeeded(self, id: key)
+   let (shouldUpdate, state) =
+    try await Reflection.cacheTestIfNeeded(self, key: key)
+   if shouldUpdate {
+    try await state.context.update()
+   }
   } catch {
    // TODO: should trace error path with state specific error
    // because throwing here will effectively remove the module from the test
@@ -72,11 +72,7 @@ public extension Testable {
   }
 
   let state = await Reflection.states[key] as! TestState<Self>
-  let context = state.mainContext
-
-  if shouldUpdate {
-   await context.update()
-  }
+  let context = state.context
 
   do {
    let startMessage = startMessage
@@ -99,6 +95,12 @@ public extension Testable {
    try await cleanUp()
    throw error
   }
+ }
+ 
+ func callAsTestForObjectFromContext(id: AnyHashable? = nil) async throws 
+ where Self: AnyObject {
+  var reference = self
+  try await reference.callAsTestFromContext(id: id)
  }
 }
 

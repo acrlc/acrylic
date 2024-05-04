@@ -1,9 +1,5 @@
 import Foundation
 
-public protocol Detachable {
- var detached: Bool { get set }
-}
-
 /// A module that performs a function when called
 public protocol Function: Detachable, Module {
  associatedtype Output
@@ -12,7 +8,7 @@ public protocol Function: Detachable, Module {
  var detached: Bool { get set }
  @inlinable
  @discardableResult
- func callAsFunction() async throws -> Output
+ func callAsFunction() throws -> Output
 }
 
 public extension Function {
@@ -22,7 +18,7 @@ public extension Function {
  @_disfavoredOverload
  @inlinable
  var detached: Bool { get { false } set {} }
- func detached(_ detached: Bool = true, priority: TaskPriority? = nil) -> Self {
+ func detached(priority: TaskPriority? = nil, _ detached: Bool = true) -> Self {
   var copy = self
   if let priority {
    copy.priority = priority
@@ -53,7 +49,7 @@ public protocol AsyncFunction: Detachable, Module {
  var detached: Bool { get set }
  @inlinable
  @discardableResult
- func callAsyncFunction() async throws -> Output
+ func callAsFunction() async throws -> Output
 }
 
 public extension AsyncFunction {
@@ -63,7 +59,7 @@ public extension AsyncFunction {
  @_disfavoredOverload
  @inlinable
  var detached: Bool { get { false } set {} }
- func detached(_ detached: Bool = true, priority: TaskPriority? = nil) -> Self {
+ func detached(priority: TaskPriority? = nil, _ detached: Bool = true) -> Self {
   var copy = self
   if let priority {
    copy.priority = priority
@@ -72,17 +68,18 @@ public extension AsyncFunction {
   return copy
  }
 
+ @_spi(ModuleReflection)
  @_disfavoredOverload
  @inlinable
  func callAsFunction() async throws -> Output {
-  try await callAsyncFunction()
+  fatalError("\(_type) '\(Self.self)' should define \(#function)")
  }
 }
 
 public extension AsyncFunction where Output == Never {
  @_spi(ModuleReflection)
  @_disfavoredOverload
- func callAsyncFunction() async throws -> Never {
+ func callAsFunction() async throws -> Never {
   fatalError("\(_type) '\(Self.self)' should define \(#function)")
  }
 }
@@ -121,24 +118,24 @@ public extension Modules {
     if task.detached {
      detached.append(
       Task.detached(priority: task.priority) {
-       try await task.callAsyncFunction()
-      }
-     )
-    } else {
-     try await results.append(task.callAsyncFunction())
-    }
-   } else if let task = module as? any Function {
-    if task.detached {
-     detached.append(
-      Task.detached(priority: task.priority) {
        try await task.callAsFunction()
       }
      )
     } else {
      try await results.append(task.callAsFunction())
     }
-   } else {
-    try await results.append(module.callAsFunction())
+   } else if let task = module as? any Function {
+    if task.detached {
+     detached.append(
+      Task.detached(priority: task.priority) {
+       try task.callAsFunction()
+      }
+     )
+    } else {
+     try results.append(task.callAsFunction())
+    }
+   } else if !module.avoid {
+    try await results.append((module.void as! Modules).callAsFunction())
    }
   }
 
@@ -150,36 +147,26 @@ public extension Modules {
  }
 }
 
-/// A protocol for runing `@main` functions
+// A protocol for running `@main` functions
 public protocol MainFunction: Function {
  init()
  @inlinable
- func main() throws
+ mutating func main() async throws
 }
 
 public extension MainFunction where Output == Never {
  @_disfavoredOverload
  @inlinable
  func main() async throws {
-  if avoid {
-   try await (self as? Modules)?.callAsFunction()
-  } else {
-   try await void.callAsFunction()
-  }
+  try await callAsVoid()
  }
 }
 
 public extension MainFunction {
- @_disfavoredOverload
  @inlinable
- func main() async throws { try await callAsFunction() }
-}
-
-public extension MainFunction {
- @inlinable
- static func main() throws {
-  let function = self.init()
-  try function.main()
+ static func main() async throws {
+  var module = Self()
+  try await module.main()
  }
 }
 
@@ -214,17 +201,17 @@ public extension Modular {
   }
 
   public static func detached(
-   _ detached: Bool = true,
-   id: ID,
+   _ id: ID,
    priority: TaskPriority? = nil,
+   _ detached: Bool = true,
    @_implicitSelfCapture action: @escaping () throws -> Output
   ) -> Self {
    self.init(id, priority: priority, detached: detached, action: action)
   }
 
   public static func detached(
-   _ detached: Bool = true,
    priority: TaskPriority? = nil,
+   _ detached: Bool = true,
    @_implicitSelfCapture action: @escaping () throws -> Output
   ) -> Self where ID == EmptyID {
    self.init(priority: priority, detached: detached, action: action)
@@ -264,17 +251,17 @@ public extension Modular {
   }
 
   public static func detached(
-   _ detached: Bool = true,
-   id: ID,
+   _ id: ID,
    priority: TaskPriority? = nil,
+   _ detached: Bool = true,
    @_implicitSelfCapture perform: @escaping () throws -> Bool
   ) -> Self {
    self.init(id, priority: priority, detached: detached, perform: perform)
   }
 
   public static func detached(
-   _ detached: Bool = true,
    priority: TaskPriority? = nil,
+   _ detached: Bool = true,
    @_implicitSelfCapture perform: @escaping () throws -> Bool
   ) -> Self where ID == EmptyID {
    self.init(priority: priority, detached: detached, perform: perform)
@@ -316,17 +303,17 @@ public extension Modular {
   }
 
   public static func detached(
-   _ detached: Bool = true,
-   id: ID,
+   _ id: ID,
    priority: TaskPriority? = nil,
+   _ detached: Bool = true,
    @_implicitSelfCapture perform: @escaping () throws -> ()
   ) -> Self {
    self.init(id, priority: priority, detached: detached, perform: perform)
   }
 
   public static func detached(
-   _ detached: Bool = true,
    priority: TaskPriority? = nil,
+   _ detached: Bool = true,
    @_implicitSelfCapture perform: @escaping () throws -> ()
   ) -> Self where ID == EmptyID {
    self.init(priority: priority, detached: detached, perform: perform)
@@ -347,7 +334,7 @@ public extension Modular.Perform {
   public var detached: Bool
   public let action: @Sendable () async throws -> Output
 
-  public func callAsyncFunction() async throws -> Output {
+  public func callAsFunction() async throws -> Output {
    try await action()
   }
  }
@@ -402,17 +389,17 @@ public extension Modular.Perform.Async {
  }
 
  static func detached(
-  _ detached: Bool = true,
-  id: ID,
+  _ id: ID,
   priority: TaskPriority? = nil,
+  _ detached: Bool = true,
   @_implicitSelfCapture action: @Sendable @escaping () async throws -> Output
  ) -> Self {
   self.init(id, priority: priority, detached: detached, action: action)
  }
 
  static func detached(
-  _ detached: Bool = true,
   priority: TaskPriority? = nil,
+  _ detached: Bool = true,
   @_implicitSelfCapture action: @Sendable @escaping () async throws -> Output
  ) -> Self where ID == EmptyID {
   self.init(priority: priority, detached: detached, action: action)
@@ -425,7 +412,7 @@ public extension Modular.Repeat {
   public var priority: TaskPriority?
   public var detached: Bool = false
   public let perform: @Sendable () async throws -> Bool
-  public func callAsyncFunction() async throws {
+  public func callAsFunction() async throws {
    while try await perform() {
     continue
    }
@@ -457,17 +444,17 @@ public extension Modular.Repeat.Async {
  }
 
  static func detached(
-  _ detached: Bool = true,
-  id: ID,
+  _ id: ID,
   priority: TaskPriority? = nil,
+  _ detached: Bool = true,
   @_implicitSelfCapture perform: @Sendable @escaping () async throws -> Bool
  ) -> Self {
   self.init(id, priority: priority, detached: detached, perform: perform)
  }
 
  static func detached(
-  _ detached: Bool = true,
   priority: TaskPriority? = nil,
+  _ detached: Bool = true,
   @_implicitSelfCapture perform: @Sendable @escaping () async throws -> Bool
  ) -> Self where ID == EmptyID {
   self.init(priority: priority, detached: detached, perform: perform)
@@ -480,7 +467,7 @@ public extension Modular.Loop {
   public var priority: TaskPriority?
   public var detached: Bool = false
   public let perform: @Sendable () async throws -> ()
-  public func callAsyncFunction() async throws {
+  public func callAsFunction() async throws {
    repeat {
     try await perform()
    } while true
@@ -512,17 +499,17 @@ public extension Modular.Loop.Async {
  }
 
  static func detached(
-  _ detached: Bool = true,
-  id: ID,
+  _ id: ID,
   priority: TaskPriority? = nil,
+  _ detached: Bool = true,
   @_implicitSelfCapture perform: @Sendable @escaping () async throws -> ()
  ) -> Self {
   self.init(id, priority: priority, detached: detached, perform: perform)
  }
 
  static func detached(
-  _ detached: Bool = true,
   priority: TaskPriority? = nil,
+  _ detached: Bool = true,
   @_implicitSelfCapture perform: @Sendable @escaping () async throws -> ()
  ) -> Self where ID == EmptyID {
   self.init(priority: priority, detached: detached, perform: perform)
@@ -536,7 +523,7 @@ public extension Module {
 }
 
 public extension Modular.Group where Results == [any Module] {
- func detached(_ detached: Bool = true, priority: TaskPriority? = nil) -> Self {
+ func detached(priority: TaskPriority? = nil, _ detached: Bool = true) -> Self {
   Self(
    id: id,
    array:
@@ -623,4 +610,7 @@ public extension Modular.Group where Results == [any Module] {
  }
 }
 
-/* TODO: Enable function that return results. Maybe, send those results with a property wrapper, keyPath, or built in observeration handler */
+// MARK: Protocols
+public protocol Detachable {
+ var detached: Bool { get set }
+}

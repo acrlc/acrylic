@@ -2,7 +2,8 @@ import Acrylic
 import Foundation
 
 public extension Modular {
- /// A namespace for basic modular functions
+ /// A namespace for basic modular functions.
+ ///
  /// - Note: This is an organized way to avoid ambiguity
  /// and the requirements for functions is that they match standard functions
  /// but they have the benifit of being modular
@@ -15,38 +16,41 @@ public extension ModularFunctions {
  // When used in modules it can more intuitive functionality
  // TODO: Support
  struct Print: Function {
-  public let items: [Any]
+  public let items: [String]
   public let separator: String
   public let terminator: String
   public var detached: Bool = true
   public
   init(_ items: Any..., separator: String = " ", terminator: String = "\n") {
-   self.items = items
+   self.items = items.map(String.init(describing:))
    self.separator = separator
    self.terminator = terminator
   }
 
   public func callAsFunction() {
-   print(items, separator: separator, terminator: terminator)
+   print(items as [Any], separator: separator, terminator: terminator)
   }
  }
 
  struct DebugPrint: Function {
-  public let items: [Any]
+  public let items: [String]
   public let separator: String
   public let terminator: String
   public var detached: Bool = true
 
   public
   init(_ items: Any..., separator: String = " ", terminator: String = "\n") {
-   self.items = items
+   self.items = items.map {
+    ($0 as? any CustomDebugStringConvertible)?.debugDescription ??
+    String(describing: $0).debugDescription
+   }
    self.separator = separator
    self.terminator = terminator
   }
 
   public func callAsFunction() {
    debugPrint(
-    items, separator: separator, terminator: terminator
+    items as [Any], separator: separator, terminator: terminator
    )
   }
  }
@@ -107,7 +111,7 @@ public extension ModularFunctions.Sleep {
    duration = Duration.nanoseconds(Int64(nanoseconds))
   }
 
-  public func callAsyncFunction() async throws {
+  public func callAsFunction() async throws {
    try await Task.sleep(for: duration)
   }
  }
@@ -120,47 +124,3 @@ public extension Module {
  @available(macOS 13, iOS 16, *)
  typealias Sleep = Modular.Functions.Sleep
 }
-
-#if canImport(Shell)
-import Shell
-
-public extension ModularFunctions {
- struct Echo: Function {
-  public let items: [Any]
-  public let color: Chalk.Color?
-  public let background: Chalk.Color?
-  public let style: Chalk.Style?
-  public let separator: String
-  public let terminator: String
-  public var detached: Bool = true
-  public
-  init(
-   _ items: Any...,
-   color: Chalk.Color? = nil,
-   background: Chalk.Color? = nil,
-   style: Chalk.Style? = nil,
-   separator: String = " ", terminator: String = "\n"
-  ) {
-   self.items = items
-   self.color = color
-   self.background = background
-   self.style = style
-   self.separator = separator
-   self.terminator = terminator
-  }
-
-  public func callAsFunction() {
-   echo(
-    items,
-    color: color, background: background, style: style,
-    separator: separator,
-    terminator: terminator
-   )
-  }
- }
-}
-
-public extension Module {
- typealias Echo = Modular.Functions.Echo
-}
-#endif

@@ -46,13 +46,20 @@ let package = Package(
     "Time",
     "Shell",
     "Acrylic",
-    "ModuleFunctions"
+    "Benchmarks"
    ],
    path: "Modules/Tests"
   ),
   .executableTarget(
    name: "AcrylicTests",
-   dependencies: ["Tests", "Benchmarks", "Configuration", "Command", "Time"],
+   dependencies: [
+    "Acrylic",
+    "Tests",
+    "ModuleFunctions",
+    "Configuration",
+    "Time",
+    "Command"
+   ],
    path: "Sources/Tests"
   ),
   .testTarget(name: "ModuleTests", dependencies: ["Acrylic"]),
@@ -61,7 +68,7 @@ let package = Package(
   ),
   .testTarget(
    name: "TestsTest",
-   dependencies: ["Tests", "Benchmarks"]
+   dependencies: ["Tests"]
   )
  ]
 )

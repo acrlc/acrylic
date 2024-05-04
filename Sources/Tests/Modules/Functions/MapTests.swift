@@ -1,3 +1,5 @@
+import Tests
+
 struct TestMap: Testable {
  @Context
  var count: Int = .zero

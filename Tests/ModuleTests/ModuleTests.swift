@@ -8,7 +8,7 @@ final class ModuleTests: XCTestCase {
   @ContextProperty
   var result = ""
 
-  try await Emit($input, result: $result) { input in
+  try Emit($input, result: $result) { input in
    input = "Testing"
    return "void"
   }()
@@ -68,7 +68,7 @@ protocol AsyncEmmiter: AsyncFunction {
  var emit: (inout Input) async throws -> Result? { get }
  var result: Result { get nonmutating set }
  // can be cached so there should be a mutable version
- func callAsyncFunction(
+ func callAsFunction(
   _ result: (inout Input) async throws -> Result?
  ) async rethrows -> Result?
 }
@@ -77,14 +77,14 @@ extension AsyncEmmiter {
  @_disfavoredOverload
  @inlinable
  @discardableResult
- func callAsyncFunction(
+ func callAsFunction(
   _ result: (inout Input) async throws -> Result?
  ) async rethrows -> Result? {
   try await result(&input)
  }
 
- public func callAsyncFunction() async throws {
-  if let result = try await callAsyncFunction(emit) {
+ public func callAsFunction() async throws {
+  if let result = try await callAsFunction(emit) {
    self.result = result
   }
  }

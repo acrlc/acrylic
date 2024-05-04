@@ -1,3 +1,6 @@
+import Tests
+import Foundation
+
 struct TestMapAsyncDetachedTasks: Testable {
  @Context
  var count: Int
@@ -37,7 +40,7 @@ struct TestMapAsyncDetachedTasks: Testable {
      }
     }
    }
-
+   
    Identity("Subtraction Count", count) == .zero
    
    Perform.Async("Set Expected Count") { count = expectation }

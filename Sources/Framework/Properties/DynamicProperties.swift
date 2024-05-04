@@ -20,11 +20,11 @@ extension ModuleContext: Combine.ObservableObject {}
 public struct _DynamicContextBindingProperty
 <A, Value: Sendable>: ContextualProperty, DynamicProperty
  where A: StaticModule {
- public var id = AnyHashable(A._mangledName)
+ public var id = A._mangledName.hashValue
 
  @usableFromInline
  let keyPath: WritableKeyPath<A, Value>
- public unowned var context: ModuleContext = .shared
+ public unowned var context: ModuleContext = .unknown
 
  @inlinable
  public var wrappedValue: Value {
@@ -35,12 +35,20 @@ public struct _DynamicContextBindingProperty
  }
 
  #if os(macOS) || os(iOS)
- @inlinable
+ public var animation: Animation?
+ @inline(__always)
  public var projectedValue: Binding<Value> {
-  Binding<Value>(
-   get: { wrappedValue },
-   set: { newValue in wrappedValue = newValue }
-  )
+  if let animation {
+   Binding<Value>(
+    get: { wrappedValue },
+    set: { newValue in withAnimation(animation) { wrappedValue = newValue } }
+   )
+  } else {
+   Binding<Value>(
+    get: { wrappedValue },
+    set: { newValue in wrappedValue = newValue }
+   )
+  }
  }
  #endif
 }
@@ -50,14 +58,16 @@ public extension View {
   where A: StaticModule
  typealias ObservedAlias<A, Value> = _ObservedModuleAliasProperty<A, Value>
   where A: ObservableModule
- typealias ContextAlias<A, Value> = _ObservedContextModuleAliasProperty<
-  A,
-  Value
- >
-  where A: ContextModule
 }
 
 public extension App {
+ typealias Alias<A, Value> = _StaticModuleAliasProperty<A, Value>
+  where A: StaticModule
+ typealias ObservedAlias<A, Value> = _ObservedModuleAliasProperty<A, Value>
+  where A: ObservableModule
+}
+
+public extension Scene {
  typealias Alias<A, Value> = _StaticModuleAliasProperty<A, Value>
   where A: StaticModule
  typealias ObservedAlias<A, Value> = _ObservedModuleAliasProperty<A, Value>
@@ -77,24 +87,17 @@ public extension ToolbarContent {
  typealias ObservedAlias<A, Value> = _ObservedModuleAliasProperty<A, Value>
   where A: ObservableModule
 }
-
-import protocol Core.Infallible
-extension ContextProperty where Value: Infallible {
- init(wrappedValue: Value = .defaultValue) {
-  self = .constant(wrappedValue)
- }
-}
 #endif
 
 @propertyWrapper
 public struct _StaticModuleAliasProperty
 <A: StaticModule, Value: Sendable>:
  @unchecked Sendable, ContextualProperty, DynamicProperty {
- public var id = AnyHashable(A._mangledName)
+ public var id = A._mangledName.hashValue
  @usableFromInline
  let keyPath: WritableKeyPath<A, Value>
 
- public unowned var context: ModuleContext = .shared
+ public unowned var context: ModuleContext = .unknown
 
  @inlinable
  public var wrappedValue: Value {
@@ -103,12 +106,21 @@ public struct _StaticModuleAliasProperty
  }
 
  #if os(macOS) || os(iOS)
- @inlinable
+ var animation: Animation?
  public var projectedValue: Binding<Value> {
-  Binding<Value>(
-   get: { wrappedValue },
-   set: { newValue in wrappedValue = newValue }
-  )
+  if let animation {
+   Binding<Value>(
+    get: { wrappedValue },
+    set: { newValue in
+     withAnimation(animation) { wrappedValue = newValue }
+    }
+   )
+  } else {
+   Binding<Value>(
+    get: { wrappedValue },
+    set: { newValue in wrappedValue = newValue }
+   )
+  }
  }
  #endif
 }
@@ -120,14 +132,22 @@ public extension _StaticModuleAliasProperty {
   _ keyPath: KeyPath<A, ContextProperty<Value>>, _ call: Bool = false
  ) {
   self.keyPath = keyPath.appending(path: \.wrappedValue)
-  Reflection.cacheOrCall(A.self, call: call)
+  Reflection.cacheOrCall(
+   moduleType: A.self,
+   stateType: ModuleState.self,
+   call: call
+  )
   let wrapper = A.shared[keyPath: keyPath]
   context = wrapper.context
   id = wrapper.id
  }
 
  init(_ keyPath: KeyPath<A, ContextProperty<Value>>, _ call: Bool = false) {
-  Reflection.cacheOrCall(A.self, call: call)
+  Reflection.cacheOrCall(
+   moduleType: A.self,
+   stateType: ModuleState.self,
+   call: call
+  )
   self.keyPath = keyPath.appending(path: \.wrappedValue)
   let wrapper = A.shared[keyPath: keyPath]
   context = wrapper.context
@@ -137,16 +157,85 @@ public extension _StaticModuleAliasProperty {
  @_disfavoredOverload
  init(_ keyPath: WritableKeyPath<A, Value>, _ call: Bool = false) {
   self.keyPath = keyPath
-  Reflection.cacheOrCall(A.self, call: call)
-  context = Reflection.states[A._mangledName]!.mainContext
+  context = Reflection.cacheOrCall(
+   moduleType: A.self,
+   stateType: ModuleState.self,
+   call: call
+  ).context
  }
 
  @_disfavoredOverload
  init(_ type: A.Type, _ call: Bool = false) where Value == A {
   keyPath = \A.self
-  Reflection.cacheOrCall(A.self, call: call)
-  context = Reflection.states[A._mangledName]!.mainContext
+  context = Reflection.cacheOrCall(
+   moduleType: A.self,
+   stateType: ModuleState.self,
+   call: call
+  ).context
  }
+
+ #if os(macOS) || os(iOS)
+ init(
+  wrappedValue: Value,
+  _ keyPath: KeyPath<A, ContextProperty<Value>>, _ call: Bool = false,
+  animation: Animation
+ ) {
+  self.keyPath = keyPath.appending(path: \.wrappedValue)
+  Reflection.cacheOrCall(
+   moduleType: A.self,
+   stateType: ModuleState.self,
+   call: call
+  )
+  let wrapper = A.shared[keyPath: keyPath]
+  context = wrapper.context
+  id = wrapper.id
+  self.animation = animation
+ }
+
+ init(
+  _ keyPath: KeyPath<A, ContextProperty<Value>>,
+  _ call: Bool = false,
+  animation: Animation
+ ) {
+  Reflection.cacheOrCall(
+   moduleType: A.self,
+   stateType: ModuleState.self,
+   call: call
+  )
+  self.keyPath = keyPath.appending(path: \.wrappedValue)
+  let wrapper = A.shared[keyPath: keyPath]
+  context = wrapper.context
+  id = wrapper.id
+  self.animation = animation
+ }
+
+ @_disfavoredOverload
+ init(
+  _ keyPath: WritableKeyPath<A, Value>,
+  _ call: Bool = false,
+  animation: Animation
+ ) {
+  self.keyPath = keyPath
+  context = Reflection.cacheOrCall(
+   moduleType: A.self,
+   stateType: ModuleState.self,
+   call: call
+  ).context
+  self.animation = animation
+ }
+
+ @_disfavoredOverload
+ init(_ type: A.Type, _ call: Bool = false, animation: Animation)
+  where Value == A {
+  keyPath = \A.self
+  context = Reflection.cacheOrCall(
+   moduleType: A.self,
+   stateType: ModuleState.self,
+   call: call
+  ).context
+  self.animation = animation
+ }
+ #endif
 }
 
 public extension Module {
@@ -159,18 +248,18 @@ public extension Module {
 public struct _ObservedModuleAliasProperty
 <A: ObservableModule, Value: Sendable>:
  @unchecked Sendable, ContextualProperty, DynamicProperty {
- public var id = AnyHashable(A._mangledName)
+ public var id = A._mangledName.hashValue
+ public var context: ModuleContext
+
  @usableFromInline
  let keyPath: WritableKeyPath<A, Value>
 
  #if canImport(SwiftUI) || canImport(TokamakDOM)
- @StateObject
+ @ObservedObject
  var module: A = .shared
  #else
  unowned var module: A = .shared
  #endif
-
- public var context: ModuleContext = .shared
 
  @inlinable
  public var wrappedValue: Value {
@@ -180,16 +269,24 @@ public struct _ObservedModuleAliasProperty
 
  // FIXME: context properties to update context here (from projectedValue)
  #if os(macOS) || os(iOS)
- @inlinable
+ var animation: Animation?
  public var projectedValue: Binding<Value> {
-  Binding<Value>(
-   get: { wrappedValue },
-   set: { newValue in wrappedValue = newValue }
-  )
+  if let animation {
+   Binding<Value>(
+    get: { wrappedValue },
+    set: { newValue in
+     withAnimation(animation) { wrappedValue = newValue }
+    }
+   )
+  } else {
+   Binding<Value>(
+    get: { wrappedValue },
+    set: { newValue in wrappedValue = newValue }
+   )
+  }
  }
  #endif
 }
-
 
 @Reflection(unsafe)
 public extension _ObservedModuleAliasProperty {
@@ -198,14 +295,22 @@ public extension _ObservedModuleAliasProperty {
   _ keyPath: KeyPath<A, ContextProperty<Value>>, _ call: Bool = false
  ) {
   self.keyPath = keyPath.appending(path: \.wrappedValue)
-  Reflection.cacheOrCall(A.self, call: call)
+  Reflection.cacheOrCall(
+   moduleType: A.self,
+   stateType: ModuleState.self,
+   call: call
+  )
   let wrapper = A.shared[keyPath: keyPath]
   context = wrapper.context
   id = wrapper.id
  }
 
  init(_ keyPath: KeyPath<A, ContextProperty<Value>>, _ call: Bool = false) {
-  Reflection.cacheOrCall(A.self, call: call)
+  Reflection.cacheOrCall(
+   moduleType: A.self,
+   stateType: ModuleState.self,
+   call: call
+  )
   self.keyPath = keyPath.appending(path: \.wrappedValue)
   let wrapper = A.shared[keyPath: keyPath]
   context = wrapper.context
@@ -215,103 +320,89 @@ public extension _ObservedModuleAliasProperty {
  @_disfavoredOverload
  init(_ keyPath: WritableKeyPath<A, Value>, _ call: Bool = false) {
   self.keyPath = keyPath
-  Reflection.cacheOrCall(A.self, call: call)
-  context = Reflection.states[A._mangledName]!.mainContext
+  context = Reflection.cacheOrCall(
+   moduleType: A.self,
+   stateType: ModuleState.self,
+   call: call
+  ).context
  }
 
  @_disfavoredOverload
  init(_ type: A.Type, _ call: Bool = false) where Value == A {
   keyPath = \A.self
-  Reflection.cacheOrCall(A.self, call: call)
-  context = Reflection.states[A._mangledName]!.mainContext
+  context = Reflection.cacheOrCall(
+   moduleType: A.self,
+   stateType: ModuleState.self,
+   call: call
+  ).context
  }
+
+ #if os(macOS) || os(iOS)
+ init(
+  wrappedValue: Value,
+  _ keyPath: KeyPath<A, ContextProperty<Value>>, _ call: Bool = false,
+  animation: Animation
+ ) {
+  self.keyPath = keyPath.appending(path: \.wrappedValue)
+  Reflection.cacheOrCall(
+   moduleType: A.self,
+   stateType: ModuleState.self,
+   call: call
+  )
+  let wrapper = A.shared[keyPath: keyPath]
+  context = wrapper.context
+  id = wrapper.id
+  self.animation = animation
+ }
+
+ init(
+  _ keyPath: KeyPath<A, ContextProperty<Value>>, _ call: Bool = false,
+  animation: Animation
+ ) {
+  Reflection.cacheOrCall(
+   moduleType: A.self,
+   stateType: ModuleState.self,
+   call: call
+  )
+  self.keyPath = keyPath.appending(path: \.wrappedValue)
+  let wrapper = A.shared[keyPath: keyPath]
+  context = wrapper.context
+  id = wrapper.id
+  self.animation = animation
+ }
+
+ @_disfavoredOverload
+ init(
+  _ keyPath: WritableKeyPath<A, Value>,
+  _ call: Bool = false,
+  animation: Animation
+ ) {
+  self.keyPath = keyPath
+  context = Reflection.cacheOrCall(
+   moduleType: A.self,
+   stateType: ModuleState.self,
+   call: call
+  ).context
+  self.animation = animation
+ }
+
+ @_disfavoredOverload
+ init(_ type: A.Type, _ call: Bool = false, animation: Animation)
+  where Value == A {
+  keyPath = \A.self
+  context = Reflection.cacheOrCall(
+   moduleType: A.self,
+   stateType: ModuleState.self,
+   call: call
+  ).context
+  self.animation = animation
+ }
+
+ #endif
 }
 
 #if os(WASI) && canImport(TokamakDOM)
 extension _ObservedModuleAliasProperty: ObservedProperty {
- public var objectWillChange: AnyPublisher<(), Never> {
-  context.objectWillChange.map { _ in }.eraseToAnyPublisher()
- }
-}
-#endif
-
-@propertyWrapper
-public struct _ObservedContextModuleAliasProperty
-<A: ContextModule, Value: Sendable>:
- @unchecked Sendable, ContextualProperty, DynamicProperty {
- public var id = AnyHashable(A._mangledName)
- #if canImport(SwiftUI) || canImport(TokamakDOM)
- @ObservedObject
- public var context: ModuleContext = .shared
- #else
- public unowned var context: ModuleContext = .shared
- #endif
-
- @usableFromInline
- let keyPath: WritableKeyPath<A, Value>
-
- @usableFromInline
- var module: A {
-  get { context.state.values[0] as! A }
-  nonmutating set { context.state.values[0] = newValue }
- }
-
- @inlinable
- public var wrappedValue: Value {
-  nonmutating get { module[keyPath: keyPath] }
-  nonmutating set { module[keyPath: keyPath] = newValue }
- }
-
- // FIXME: context properties to update context here (from projectedValue)
- #if os(macOS) || os(iOS)
- @inlinable
- public var projectedValue: Binding<Value> {
-  Binding<Value>(
-   get: { wrappedValue },
-   set: { newValue in wrappedValue = newValue }
-  )
- }
- #endif
-}
-
-@Reflection(unsafe)
-public extension _ObservedContextModuleAliasProperty {
-// init(
-//  wrappedValue: Value,
-//  _ keyPath: KeyPath<A, ContextProperty<Value>>, _ call: Bool = false
-// ) {
-//  self.keyPath = keyPath.appending(path: \.wrappedValue)
-//  Reflection.cacheOrCall(A(), id: A._mangledName, call: call)
-//  let wrapper = (Self.index.element as! A)[keyPath: keyPath]
-//  context = wrapper.context
-//  id = wrapper.id
-// }
-//
-// init(_ keyPath: KeyPath<A, ContextProperty<Value>>, _ call: Bool = false) {
-//  Reflection.cacheOrCall(A(), id: A._mangledName, call: call)
-//  self.keyPath = keyPath.appending(path: \.wrappedValue)
-//  let wrapper = (Self.index.element as! A)[keyPath: keyPath]
-//  context = wrapper.context
-//  id = wrapper.id
-// }
-
- @_disfavoredOverload
- init(_ keyPath: WritableKeyPath<A, Value>, _ call: Bool = false) {
-  Reflection.cacheOrCall(A(), id: A._mangledName, call: call)
-  //self.context = Reflection.states[A._mangledName]!.mainContext
-  self.keyPath = keyPath
- }
-
- @_disfavoredOverload
- init(_ type: A.Type, _ call: Bool = false) where Value == A {
-  Reflection.cacheOrCall(A(), id: A._mangledName, call: call)
-  //self.context = Reflection.states[A._mangledName]!.mainContext
-  keyPath = \A.self
- }
-}
-
-#if os(WASI) && canImport(TokamakDOM)
-extension _ObservedModuleContextAliasProperty: ObservedProperty {
  public var objectWillChange: AnyPublisher<(), Never> {
   context.objectWillChange.map { _ in }.eraseToAnyPublisher()
  }

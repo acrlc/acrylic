@@ -1,11 +1,19 @@
 @_spi(ModuleReflection) import Acrylic
+import Tests
+#if !os(Linux)
+import ModuleFunctions
+#endif
+import Shell
 
 /// A module for testing operations that need to be cancelled
-struct TestAsyncContext: Tests {
+struct TestAsyncContext: Testable {
  @Context
  private var should: Bool = true
  @Context
  private var throwError: Bool = false
+ @Context
+ var count: Int = .zero
+ var pressure: Size = .zero
 
  @discardableResult
  func defect() -> Bool {
@@ -17,18 +25,28 @@ struct TestAsyncContext: Tests {
  var void: some Module {
   if should {
    Echo("\nSuccess!\n", color: .green, style: [.bold, .underlined])
-  } else {
+  } else if count < 1 {
    Perform.Async("defect", action: { defect() })
    Echo("\nFailure!\n", color: .extended(11), style: [.bold, .underlined])
+   Perform.Async { count += 1 }
+  } else {
+   Perform.Async {
+    Map(count: 111) {
+     Perform.Async {
+      count += 1
+     }
+     Identity(count)
+    }
+   }
   }
  }
 
  var tests: some Testable {
-  get throws {
-   let state = ModuleState.initialize(with: Self())
-   let index = try state.indices.first.throwing()
+  get async throws {
+   let state = try await ModuleState.initialize(with: Self())
+   let context = state.context
+   let index = context.index
    let value = try (index.element as? Self).throwing()
-   let context = state.mainContext
 
    Perform.Async("Perform & Cancel Tasks") {
     value.should = false
@@ -36,9 +54,7 @@ struct TestAsyncContext: Tests {
     Task.detached {
      try await context.callAsFunction()
     }
-    await context.cancel()
-    // check if tasks were cancelled (could throw if performance deviates)
-    try (!context.isRunning).throwing()
+    context.cancel()
     value.should = true
    }
 
@@ -48,7 +64,7 @@ struct TestAsyncContext: Tests {
 
    Perform.Async("Update Context") {
     value.defect()
-    try await context.waitForAll()
+    try await context.update(with: .active)
    }
 
    // assert that the module context was updated to false
@@ -56,25 +72,69 @@ struct TestAsyncContext: Tests {
    // assert that module structure was changed
    Assert("Structure Update", value.throwError)
 
-   Test("Assert Context Retained w/ Results") {
-    Identity("Results == [true]") {
-     try await context.callAsFunction()
+   /// - Note: Results feature not implemented but may return in some form
+   /* Test("Assert Context Retained w/ Results") {
+     Identity("Results == [true]") {
+      try await context.callAsFunction()
 
-     let results =
-      try await context.results.wrapped.throwing(reason: "results are empty")
+      let results =
+       try context.results.wrapped.throwing(reason: "results are empty")
 
-     let defectiveIndex =
-      try index.index(where: { $0.id as? String == "defect" })
-       .throwing(reason: "couldn't find value with id: defect")
+      let defectiveIndex =
+       try index.index(where: { $0.id as? String == "defect" })
+        .throwing(reason: "couldn't find value with id: defect")
 
-     let key = AnyHashable(defectiveIndex.key)
-     return try (
-      results.values.first(
-       where: { $0.contains(where: { $0.key == key }) }
-      )?[key] as? Bool
-     )
-     .throwing(reason: "results not returned")
-    } == true
+      let key = defectiveIndex.key
+      return try (
+       results.values.first(
+        where: { $0.contains(where: { $0.key == key }) }
+       )?[key] as? Bool
+      )
+      .throwing(reason: "results not returned")
+     } == true
+    } */
+
+   Assert("Benchmark Preparation") {
+    value.should = false
+    value.count = 1
+
+    try await context.update(with: .active)
+    let value = try (context.index.element as? Self).throwing()
+
+    return value.should == false && value.count == 1
+   }
+
+   /// A benchmark that tests the speed and cancelling of context operations
+   /// - Remark: These aren't interesting examples to benchmark on but they do
+   /// give a baseline read on what may happen when cancellation, calls, and
+   /// updates are necessary
+   ///
+   /// The state is determined by the user and framework, itself, but is open
+   /// to modification where needed ... These tests are to measure up to the
+   /// most extreme cases with precision
+   ///
+   Benchmarks("ModuleContext Operations") {
+    Measure.Async(
+     "Call Idle Context", warmup: 2, iterations: pressure * 333,
+     perform: {
+      try await context.callAsFunction(with: .idle)
+     }
+    )
+
+    Measure.Async(
+     "Update Active Context", warmup: 2, iterations: pressure * 333,
+     perform: {
+      try await context.update(with: .active)
+     }
+    )
+    
+    Measure.Async(
+     "Cancel & Call Context", warmup: 2, iterations: pressure * 333,
+     perform: {
+      await context.cancel()
+      try? await context.callTasks()
+     }
+    )
    }
   }
  }

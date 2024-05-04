@@ -3,39 +3,81 @@ public protocol StaticModule: Module {
 }
 
 @_spi(ModuleReflection)
-extension StaticModule {
- @Reflection(unsafe)
- @inlinable
- unowned static var state: ModuleState {
-  Reflection.cacheIfNeeded(self)
+@Reflection
+public extension StaticModule {
+ static var state: ModuleState {
+  Reflection.cacheIfNeeded(
+   id: _mangledName, module: shared, stateType: ModuleState.self
+  )
  }
 
- @usableFromInline
- static var index: ModuleIndex { state.indices[0] }
+ unowned static var context: ModuleContext { state.context }
+
+ static func callContext() async throws {
+  try await context.callAsFunction()
+ }
+ 
+ static func callContext(
+  with state: ModuleContext.State
+ ) async throws {
+  try await context.callAsFunction(with: state)
+ }
+ 
+ static func cancelContext(with state: ModuleContext.State) async {
+  await context.cancel(with: state)
+ }
+ 
+ static func updateContext() async throws {
+  try await context.update()
+ }
+ 
+ static func waitForContext() async throws {
+  try await context.wait()
+ }
 }
 
 public extension StaticModule {
- unowned static var context: ModuleContext { state.mainContext }
-
- @inlinable
- func callContext() {
-  Self.context.callAsFunction()
+ func callContext(
+  with state: ModuleContext.State = .active
+ ) async throws {
+  try await Self.callContext(with: state)
  }
 
- @inlinable
- func cancelContext() {
-  Task { await Self.context.cancel() }
+ func cancelContext(with state: ModuleContext.State = .idle) async {
+  await Self.cancelContext(with: state)
  }
 
- @inlinable
- static func updateContext() {
-  Task { await context.update() }
+ func updateContext() async throws {
+  try await Self.updateContext()
+ }
+
+ func waitForContext() async throws {
+  try await Self.waitForContext()
+ }
+
+ func callContext(with state: ModuleContext.State = .active) {
+  Task {
+   try await Self.callContext(with: state)
+  }
+ }
+
+ func cancelContext(with state: ModuleContext.State = .idle) {
+  Task {
+   await Self.cancelContext(with: state)
+  }
+ }
+
+ func updateContext() {
+  Task {
+   try await Self.updateContext()
+  }
  }
 
  @discardableResult
- @inlinable
- mutating func call<Result>(action: (inout Self) -> Result) -> Result {
-  defer { self.callContext() }
+ mutating func call<Result>(
+  with state: ModuleContext.State = .active, action: (inout Self) -> Result
+ ) -> Result {
+  defer { self.callContext(with: state) }
   return action(&self)
  }
 }
@@ -43,16 +85,18 @@ public extension StaticModule {
 #if canImport(Combine) && canImport(SwiftUI)
 import Combine
 
+@Reflection
 public extension StaticModule {
- @inlinable
  var contextWillChange: ModuleContext.ObjectWillChangePublisher {
   Self.context.objectWillChange
  }
 }
+
 #elseif os(WASI) && canImport(TokamakDOM) && canImport(OpenCombine)
 import OpenCombine
+
+@Reflection
 extension StaticModule {
- @inlinable
  var contextWillChange: ModuleContext.ObjectWillChangePublisher {
   Self.context.objectWillChange
  }

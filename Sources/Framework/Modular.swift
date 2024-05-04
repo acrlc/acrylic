@@ -1,36 +1,11 @@
 @resultBuilder
-open class Modular {
+public enum Modular {
  public typealias Component = any Module
  public typealias Components = Modules
- // public static func buildBlock() -> EmptyModule { EmptyModule() }
-// public static func buildBlock(_ empty: ()) -> EmptyModule {
-//  EmptyModule()
-// }
-
- public static func buildBlock<Result: Sendable>(
-  @_implicitSelfCapture
-  _ action: @autoclosure @escaping () throws -> Result
- ) -> Perform<EmptyID, Result> {
-  Perform(action: { try action() })
- }
-
- public static func buildBlock<Result: Sendable>(
-  @_implicitSelfCapture
-  _ action: @Sendable @autoclosure @escaping () async throws -> Result
- ) async -> Perform<EmptyID, Result>.Async {
-  Perform.Async(action: { try await action() })
- }
-
- public static func buildBlock<A: Module>(
-  @_implicitSelfCapture
-  _ module: @autoclosure () -> A
- ) -> A { module() }
- 
  public static func buildBlock(_ components: Component...) -> Components {
   components._flattened
  }
 
- // MARK: Modular Statements
  public static func buildArray(_ components: [Component]) -> Components {
   components._flattened
  }

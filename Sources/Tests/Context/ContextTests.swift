@@ -1,37 +1,67 @@
 @_spi(ModuleReflection) import Acrylic
-@_spi(TestModuleContext) import Acrylic
+import Tests
+#if !os(Linux)
+import ModuleFunctions
+#endif
+import Shell
 
 // A module for testing the basic running and updating
-struct TestContext: Testable {
+struct TestContext: Tests {
  @Context
- private var should: Bool = false
+ private var should: Bool = true
 
  var void: some Module {
   if should {
-   Echo("\nHello Acrylic!\n", color: .green, style: [.bold, .underlined])
+   Echo(
+    "\nHello Acrylic!\n", color: .green, style: [.bold, .underlined]
+   )
   } else {
    Echo("\nfatalError()\n", color: .red, style: .bold)
   }
  }
 
  var tests: some Testable {
-  get throws {
-   let state = ModuleState.initialize(with: Self())
-   let index = try state.indices.first.throwing()
+  get async throws {
+   let state = try await ModuleState.initialize(with: Self())
+   let context = state.context
+   let index = context.index
    let value = try (index.element as? Self).throwing()
-   let context = state.mainContext
 
+   /// Modifying the value from a ``Context`` property reflects changes to a
+   /// module but must consider a state, before retaining context between
+   /// updates to properties or a ``ModuleContext`` which can be called
+   /// depending on the module's protocol and specific ``StateActor``
+   ///
    Perform.Async("Modify State & Context") {
     value.should = false
-    // context must be updated or called before reflecting changes to `void`
-    await context.update()
+    ///
+    /// - Important: Context, on updating ``ModuleContext``
+    /// Hidden states be updated or called before reflecting changes to `void.`
+    /// The default `update` function will infer based on the current state, but
+    /// can used to reflect known states, such as `active`, which is known
+    /// to cancel, invalidate, and rebuild a ``ModuleContext``
+    ///
+    /// After cancelling the context's state, which will be set to active, the
+    /// context will remain `terminal` until called, set, or properly cancelled.
+    try await context.update(with: .active)
    }
 
+   /// - Warning:
+   ///  If state is marked as `terminal` a ``CancellationError`` will be thrown.
+   /// This is used to dismiss updates when called in succession ...
+   Assert("Dismiss Terminal State") {
+    do { try await context.update() }
+    catch where error is CancellationError {
+     notify("Successfully cancelled update")
+     return true
+    }
+    return false
+   }
    Test("Check Context & Structure") {
     Assert {
-     let next = try index.first(where: { $0 is Echo }).throwing()
+     let next = try index.next.throwing().element
      // find the first string value of Echo
-     let str = try ((next as? Echo)?.items.first as? String).throwing()
+     let str = try ((next as? Echo)?.items.first)?.throwing()
      return str == "\nfatalError()\n"
     }
 
@@ -40,57 +70,30 @@ struct TestContext: Testable {
 
     Perform.Async {
      value.should = true
-     await context.update()
-     try await context.callTestTasks()
+     try await context.update(with: .active)
+     try await context.callTasks()
     }
 
     // assert that main module's void was updated
     Assert("Modified Echo") {
-     var next = try index.first(where: { $0 is Echo }).throwing()
-     // find the first string value of Echo
-     let previousStr = try ((next as? Echo)?.items.first as? String)
-      .throwing()
+     var next = try index.next.throwing().element
 
+     // find the first string value of Echo
+     let previousStr =
+      try ((next as? Echo)?.items.first as? String).throwing()
      value.should = false
 
      // must update context after modifying properties
-     await context.update()
-
-     next = try index.first(where: { $0 is Echo }).throwing()
+     try await context.update(with: .active)
+     next = try index.next.throwing().element
 
      // find the first string value of Echo
-     let str = try ((next as? Echo)?.items.first as? String).throwing()
+     let str =
+      try ((next as? Echo)?.items.first as? String).throwing()
 
      return str == "\nfatalError()\n" && previousStr == "\nHello Acrylic!\n"
     }
    }
   }
- }
-}
-
-extension ModuleContext {
- func callTestTasks() async throws {
-  assert(!(calledTask?.isRunning ?? false))
-  
-  let task = Task {
-   let baseIndex = index
-   results = .empty
-   results[baseIndex.key] = try await tasks()
-   let baseIndices = baseIndex.indices
-   guard baseIndices.count > 1 else {
-    return
-   }
-
-   let elements = baseIndices.dropFirst().map {
-    ($0, self.cache[$0.key].unsafelyUnwrapped)
-   }
-
-   for (index, context) in elements where index.checkedElement != nil {
-    results[index.key] = try await context.tasks()
-   }
-  }
-
-  calledTask = task
-  try await task.value
  }
 }

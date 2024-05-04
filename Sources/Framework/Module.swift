@@ -1,27 +1,15 @@
 public protocol Module: Identifiable {
  associatedtype VoidFunction: Module
  @Modular
- var void: VoidFunction { get }
+ var void: VoidFunction { get async throws }
 }
 
 public extension Module {
  @_disfavoredOverload
- @inlinable
- @discardableResult
- func callAsFunction() async throws -> Sendable {
+ func callAsVoid() async throws {
   var detached = [Task<Sendable, Error>]()
 
   if let function = self as? any AsyncFunction {
-   if function.detached {
-    detached.append(
-     Task.detached(priority: function.priority) {
-      try await function.callAsyncFunction()
-     }
-    )
-   } else {
-    return try await function.callAsyncFunction()
-   }
-  } else if let function = self as? any Function {
    if function.detached {
     detached.append(
      Task.detached(priority: function.priority) {
@@ -29,13 +17,23 @@ public extension Module {
      }
     )
    } else {
-    return try await function.callAsFunction()
+    try await function.callAsFunction()
+   }
+  } else if let function = self as? any Function {
+   if function.detached {
+    detached.append(
+     Task.detached(priority: function.priority) {
+      try function.callAsFunction()
+     }
+    )
+   } else {
+    try function.callAsFunction()
    }
   } else {
    if avoid {
-    return try await (self as? Modules)?.callAsFunction()
+    try await (self as? Modules)?.callAsFunction()
    } else {
-    return try await void.callAsFunction()
+    try await void.callAsVoid()
    }
   }
 
@@ -46,22 +44,36 @@ public extension Module {
  }
 
  @_spi(ModuleReflection)
+ var __key: Int {
+  !(ID.self is Never.Type) && !(ID.self is EmptyID.Type) &&
+   String(describing: id).readableRemovingQuotes != "nil" ?
+   id.hashValue : (
+    Swift._mangledTypeName(Self.self) ?? String(describing: Self.self)
+   ).hashValue
+ }
+
+ @_spi(ModuleReflection)
  @_disfavoredOverload
+ @Reflection
  @inlinable
  mutating func mutatingCallWithContext(id: AnyHashable? = nil) async throws {
-  let id = id ?? AnyHashable(id)
-  let shouldUpdate = await Reflection.states[id] != nil
+  let key = id?.hashValue ?? __key
+  let shouldUpdate = Reflection.states[key] != nil
 
   if !shouldUpdate {
-   await Reflection.cacheIfNeeded(self, id: id)
+   try await Reflection.asyncCacheIfNeeded(
+    id: key,
+    module: self,
+    stateType: ModuleState.self
+   )
   }
 
-  let index = await Reflection.states[id].unsafelyUnwrapped.indices[0]
-  let context = ModuleContext.cache[index.key]
-   .unsafelyUnwrapped
+  let state = Reflection.states[key].unsafelyUnwrapped
+  let index = state.context.index
+  let context = state.context
 
   if shouldUpdate {
-   await context.update()
+   try await context.update()
   }
 
   try await context.callTasks()
@@ -72,19 +84,22 @@ public extension Module {
  @_disfavoredOverload
  @inlinable
  func callWithContext(id: AnyHashable? = nil) async throws {
-  let id = id ?? AnyHashable(id)
-  let shouldUpdate = await Reflection.states[id] != nil
+  let key = id?.hashValue ?? __key
+  let shouldUpdate = await Reflection.states[key] != nil
 
   if !shouldUpdate {
-   await Reflection.cacheIfNeeded(self, id: id)
+   try await Reflection.cacheIfNeeded(
+    id: key,
+    module: self,
+    stateType: ModuleState.self
+   )
   }
 
-  let index = await Reflection.states[id].unsafelyUnwrapped.indices[0]
-  let context = ModuleContext.cache[index.key]
-   .unsafelyUnwrapped
+  let state = await Reflection.states[key].unsafelyUnwrapped
+  let context = state.context
 
   if shouldUpdate {
-   await context.update()
+   try await context.update()
   }
 
   try await context.callTasks()
@@ -139,8 +154,13 @@ public struct EmptyModule: Module, ExpressibleAsEmpty {
 public extension Module {
  @_disfavoredOverload
  var isEmpty: Bool {
-  (self as? any ExpressibleAsEmpty)?.isEmpty ??
-   (self as? Modules)?.isEmpty ?? false
+  switch self {
+  case let `self` as [[any Module]]: self.allSatisfy(\.isEmpty)
+  case let `self` as [any Module]: self.allSatisfy(\.isEmpty)
+  case let `self` as any ExpressibleAsEmpty: self.isEmpty
+  case is EmptyModule: true
+  default: false
+  }
  }
 
  @_disfavoredOverload
@@ -161,7 +181,7 @@ extension Optional: Module where Wrapped: Module {
  }
 }
 
-extension Module {
+public extension Module {
  @inlinable
  var avoid: Bool {
   VoidFunction.self is EmptyModule.Type ||
@@ -169,7 +189,7 @@ extension Module {
  }
 
  @inlinable
- public var hasVoid: Bool { !avoid }
+ var hasVoid: Bool { !avoid }
 }
 
 import struct Core.EmptyID

@@ -1,7 +1,6 @@
 @_spi(ModuleReflection) import Acrylic
 import Core
-@_exported import ModuleFunctions
-@_exported import Shell
+import Shell
 import struct Time.Timer
 
 public protocol Testable: TestProtocol {
@@ -17,12 +16,10 @@ extension Modules: Testable {
 
 public extension Testable {
  @_disfavoredOverload
- @inline(__always)
- var tests: some Module { get throws { void } }
+ var tests: some Module { get async throws { try await void } }
 }
 
 public extension Testable {
- // swiftlint:disable:next function_body_length cyclomatic_complexity
  func test(_ modules: Modules, timer: inout Timer) async throws {
   for module in modules {
    let isTest = module is any TestProtocol
@@ -75,25 +72,26 @@ public extension Testable {
        continue
       } else {
        timer.fire()
-       result = try await asyncFunction.callAsyncFunction()
+       result =
+        try await asyncFunction.callAsFunction()
       }
      } else if let function = module as? any Function {
       if function.detached {
        Task.detached {
-        try await function.callAsFunction()
+        try function.callAsFunction()
        }
        continue
       } else {
        timer.fire()
-       result = try await function.callAsFunction()
+       result = try function.callAsFunction()
       }
      } else if isTest {
       try await setUpTest()
       timer.fire()
       result = try await test.callAsTest()
-     } else {
+     } else if !module.avoid {
       timer.fire()
-      result = try await module.callAsFunction()
+      result = try await (module.void as! Modules).callAsFunction()
      }
 
      endTime = timer.elapsed.description
@@ -226,6 +224,12 @@ public extension Testable {
    throw error
   }
  }
+
+ func callAsTestForObject() async throws
+  where Self: AnyObject {
+  var reference = self
+  try await reference.callAsTest()
+ }
 }
 
 /// An error designed to be used when testing
@@ -234,9 +238,8 @@ struct TestsError: Error, CustomStringConvertible {
  public var description: String { message }
 }
 
-#if swift(<5.10)
 /// A module for testing modules that allows throwing within an async context
-public struct Test<ID: Hashable, Results: Module>: Testable {
+public struct Test<ID: Hashable>: Testable {
  public var id: ID?
  public var breakOnError: Bool = false
  public var setUpHandler: (() async throws -> ())?
@@ -244,7 +247,7 @@ public struct Test<ID: Hashable, Results: Module>: Testable {
  public var cleanUpHandler: (() async throws -> ())?
 
  @Modular
- var handler: () async throws -> Results
+ var handler: () async throws -> Modules
 
  public func setUp() async throws {
   try await setUpHandler?()
@@ -270,7 +273,7 @@ public extension Test {
   setUp: (() async throws -> ())? = nil,
   onCompletion: (() async throws -> ())? = nil,
   cleanUp: (() async throws -> ())? = nil,
-  @Modular handler: @escaping () async throws -> Results
+  @Modular handler: @escaping () async throws -> Modules
  ) {
   self.id = id
   self.breakOnError = breakOnError
@@ -285,7 +288,7 @@ public extension Test {
   setUp: (() async throws -> ())? = nil,
   onCompletion: (() async throws -> ())? = nil,
   cleanUp: (() async throws -> ())? = nil,
-  @Modular handler: @escaping () async throws -> Results
+  @Modular handler: @escaping () async throws -> Modules
  ) where ID == EmptyID {
   self.breakOnError = breakOnError
   setUpHandler = setUp
@@ -294,69 +297,6 @@ public extension Test {
   self.handler = handler
  }
 }
-#else
-/// A module for testing modules that allows throwing within an async context
-public struct Test<ID: Hashable, Results: Module>: Testable {
- public var id: ID?
- public var breakOnError: Bool = false
- public var setUpHandler: (() async throws -> ())?
- public var onCompletionHandler: (() async throws -> ())?
- public var cleanUpHandler: (() async throws -> ())?
-
- @Modular
- var handler: () throws -> Results
-
- public func setUp() async throws {
-  try await setUpHandler?()
- }
-
- public func onCompletion() async throws {
-  try await onCompletionHandler?()
- }
-
- public func cleanUp() async throws {
-  try await cleanUpHandler?()
- }
-
- // FIXME: Swift 5.10 asks for await on the getter, also declared as `get async throws` within the protocol
- // The only workaround I'm aware of is to use an earlier version of swift
- public var tests: Modules {
-  get throws { try handler() }
- }
-}
-
-public extension Test {
- init(
-  _ id: ID,
-  breakOnError: Bool = false,
-  setUp: (() async throws -> ())? = nil,
-  onCompletion: (() async throws -> ())? = nil,
-  cleanUp: (() async throws -> ())? = nil,
-  @Modular handler: @escaping () throws -> Results
- ) {
-  self.id = id
-  self.breakOnError = breakOnError
-  setUpHandler = setUp
-  onCompletionHandler = onCompletion
-  cleanUpHandler = cleanUp
-  self.handler = handler
- }
-
- init(
-  breakOnError: Bool = false,
-  setUp: (() async throws -> ())? = nil,
-  onCompletion: (() async throws -> ())? = nil,
-  cleanUp: (() async throws -> ())? = nil,
-  @Modular handler: @escaping () throws -> Results
- ) where ID == EmptyID {
-  self.breakOnError = breakOnError
-  setUpHandler = setUp
-  onCompletionHandler = onCompletion
-  cleanUpHandler = cleanUp
-  self.handler = handler
- }
-}
-#endif
 
 /// An assertion test that be combined with a result or called independently
 public struct Assertion<ID: Hashable, A: Sendable, B: Sendable>: AsyncFunction {
@@ -366,15 +306,15 @@ public struct Assertion<ID: Hashable, A: Sendable, B: Sendable>: AsyncFunction {
  /// The comparison operator for `A` and `B`
  var `operator`: (A, B) -> Bool = { _, _ in true }
 
- public init(
+ fileprivate init(
   id: ID,
-  _ lhs: A,
-  _ operator: @escaping (A, B) -> Bool = { $0 == $1 },
-  _ rhs: B
- ) where A: Equatable, A == B {
+  lhs: @escaping () async throws -> A,
+  operator: @escaping (A, B) -> Bool,
+  rhs: @escaping () async throws -> B
+ ) {
   self.id = id
-  self.lhs = { lhs }
-  self.rhs = { rhs }
+  self.lhs = lhs
+  self.rhs = rhs
   self.operator = `operator`
  }
 
@@ -382,7 +322,7 @@ public struct Assertion<ID: Hashable, A: Sendable, B: Sendable>: AsyncFunction {
   _ id: ID,
   _ lhs: @escaping @autoclosure () throws -> A,
   _ operator: @escaping (A, B) -> Bool = { $0 == $1 },
-  _ rhs: @escaping () async throws -> B
+  _ rhs: @escaping @autoclosure () throws -> B
  ) where A: Equatable, A == B {
   self.id = id
   self.lhs = lhs
@@ -427,19 +367,9 @@ public struct Assertion<ID: Hashable, A: Sendable, B: Sendable>: AsyncFunction {
  }
 
  public init(
-  _ lhs: A,
-  _ operator: @escaping (A, B) -> Bool = { $0 == $1 },
-  _ rhs: B
- ) where ID == EmptyID, A: Equatable, A == B {
-  self.lhs = { lhs }
-  self.rhs = { rhs }
-  self.operator = `operator`
- }
-
- public init(
   _ lhs: @escaping @autoclosure () throws -> A,
   _ operator: @escaping (A, B) -> Bool = { $0 == $1 },
-  _ rhs: @escaping () async throws -> B
+  _ rhs: @escaping @autoclosure () throws -> B
  ) where ID == EmptyID, A: Equatable, A == B {
   self.lhs = lhs
   self.rhs = rhs
@@ -492,7 +422,7 @@ public struct Assertion<ID: Hashable, A: Sendable, B: Sendable>: AsyncFunction {
  }
 
  @discardableResult
- public func callAsyncFunction() async throws -> B {
+ public func callAsFunction() async throws -> B {
   let lhs = try await lhs()
   let rhs = try await rhs()
 
@@ -545,62 +475,152 @@ public extension Assertion where A == Bool, B == Swift.Void {
 
 // MARK: - Coalescing Assertions
 public extension Function where Output: Equatable {
- static func == (lhs: Self, rhs: Output) -> Assertion<ID, Output, Output> {
-  Assertion(id: lhs.id, lhs.callAsFunction, ==, rhs)
+ static func == (
+  lhs: Self, rhs: @escaping @autoclosure () throws -> Output
+ ) rethrows -> Assertion<ID, Output, Output> {
+  Assertion(id: lhs.id, lhs: lhs.callAsFunction, operator: ==, rhs: rhs)
  }
 
- static func != (lhs: Self, rhs: Output) -> Assertion<ID, Output, Output> {
+ static func == (
+  lhs: Self, rhs: @escaping @autoclosure () async throws -> Output
+ ) async rethrows -> Assertion<ID, Output, Output> {
+  Assertion(id: lhs.id, lhs: lhs.callAsFunction, operator: ==, rhs: rhs)
+ }
+
+ static func != (
+  lhs: Self, rhs: Output
+ ) -> Assertion<ID, Output, Output> {
   Assertion(id: lhs.id, lhs.callAsFunction, !=, rhs)
  }
 }
 
 public extension AsyncFunction where Output: Equatable {
- static func == (lhs: Self, rhs: Output) -> Assertion<ID, Output, Output> {
-  Assertion(id: lhs.id, lhs.callAsyncFunction, ==, rhs)
+ static func == (
+  lhs: Self, rhs: @escaping @autoclosure () throws -> Output
+ ) rethrows -> Assertion<ID, Output, Output> {
+  Assertion(id: lhs.id, lhs: lhs.callAsFunction, operator: ==, rhs: rhs)
  }
 
- static func != (lhs: Self, rhs: Output) -> Assertion<ID, Output, Output> {
-  Assertion(id: lhs.id, lhs.callAsyncFunction, !=, rhs)
+ static func == (
+  lhs: Self, rhs: @escaping @autoclosure () async throws -> Output
+ ) async rethrows -> Assertion<ID, Output, Output> {
+  Assertion(id: lhs.id, lhs: lhs.callAsFunction, operator: ==, rhs: rhs)
+ }
+
+ static func != (
+  lhs: Self, rhs: @escaping @autoclosure () throws -> Output
+ ) rethrows -> Assertion<ID, Output, Output> {
+  Assertion(id: lhs.id, lhs: lhs.callAsFunction, operator: !=, rhs: rhs)
+ }
+
+ static func != (
+  lhs: Self, rhs: @escaping @autoclosure () async throws -> Output
+ ) async rethrows -> Assertion<ID, Output, Output> {
+  Assertion(id: lhs.id, lhs: lhs.callAsFunction, operator: !=, rhs: rhs)
  }
 }
 
 public extension Function where Output: Comparable {
- static func < (lhs: Self, rhs: Output) -> Assertion<ID, Output, Output> {
-  Assertion(id: lhs.id, lhs.callAsFunction, <, rhs)
+ static func < (
+  lhs: Self, rhs: @escaping @autoclosure () throws -> Output
+ ) rethrows -> Assertion<ID, Output, Output> {
+  Assertion(id: lhs.id, lhs: lhs.callAsFunction, operator: <, rhs: rhs)
  }
 
- static func > (lhs: Self, rhs: Output) -> Assertion<ID, Output, Output> {
-  Assertion(id: lhs.id, lhs.callAsFunction, >, rhs)
+ static func < (
+  lhs: Self, rhs: @escaping @autoclosure () async throws -> Output
+ ) async rethrows -> Assertion<ID, Output, Output> {
+  Assertion(id: lhs.id, lhs: lhs.callAsFunction, operator: <, rhs: rhs)
+ }
+
+ static func > (
+  lhs: Self, rhs: @escaping @autoclosure () throws -> Output
+ ) rethrows -> Assertion<ID, Output, Output> {
+  Assertion(id: lhs.id, lhs: lhs.callAsFunction, operator: >, rhs: rhs)
+ }
+
+ static func > (
+  lhs: Self, rhs: @escaping @autoclosure () async throws -> Output
+ ) async rethrows -> Assertion<ID, Output, Output> {
+  Assertion(id: lhs.id, lhs: lhs.callAsFunction, operator: >, rhs: rhs)
  }
 }
 
 public extension AsyncFunction where Output: Comparable {
- static func < (lhs: Self, rhs: Output) -> Assertion<ID, Output, Output> {
-  Assertion(id: lhs.id, lhs.callAsyncFunction, <, rhs)
+ static func < (
+  lhs: Self, rhs: @escaping @autoclosure () throws -> Output
+ ) rethrows -> Assertion<ID, Output, Output> {
+  Assertion(id: lhs.id, lhs: lhs.callAsFunction, operator: <, rhs: rhs)
  }
 
- static func > (lhs: Self, rhs: Output) -> Assertion<ID, Output, Output> {
-  Assertion(id: lhs.id, lhs.callAsyncFunction, >, rhs)
+ static func < (
+  lhs: Self, rhs: @escaping @autoclosure () async throws -> Output
+ ) async rethrows -> Assertion<ID, Output, Output> {
+  Assertion(id: lhs.id, lhs: lhs.callAsFunction, operator: <, rhs: rhs)
+ }
+
+ static func > (
+  lhs: Self, rhs: @escaping @autoclosure () throws -> Output
+ ) rethrows -> Assertion<ID, Output, Output> {
+  Assertion(id: lhs.id, lhs: lhs.callAsFunction, operator: >, rhs: rhs)
+ }
+
+ static func > (
+  lhs: Self, rhs: @escaping @autoclosure () async throws -> Output
+ ) async rethrows -> Assertion<ID, Output, Output> {
+  Assertion(id: lhs.id, lhs: lhs.callAsFunction, operator: >, rhs: rhs)
  }
 }
 
 public extension Function where Output: Equatable & Comparable {
- static func <= (lhs: Self, rhs: Output) -> Assertion<ID, Output, Output> {
-  Assertion(id: lhs.id, lhs.callAsFunction, <=, rhs)
+ static func <= (
+  lhs: Self, rhs: @escaping @autoclosure () throws -> Output
+ ) rethrows -> Assertion<ID, Output, Output> {
+  Assertion(id: lhs.id, lhs: lhs.callAsFunction, operator: <=, rhs: rhs)
  }
 
- static func >= (lhs: Self, rhs: Output) -> Assertion<ID, Output, Output> {
-  Assertion(id: lhs.id, lhs.callAsFunction, >=, rhs)
+ static func <= (
+  lhs: Self, rhs: @escaping @autoclosure () async throws -> Output
+ ) async rethrows -> Assertion<ID, Output, Output> {
+  Assertion(id: lhs.id, lhs: lhs.callAsFunction, operator: <=, rhs: rhs)
+ }
+
+ static func >= (
+  lhs: Self, rhs: @escaping @autoclosure () throws -> Output
+ ) rethrows -> Assertion<ID, Output, Output> {
+  Assertion(id: lhs.id, lhs: lhs.callAsFunction, operator: >=, rhs: rhs)
+ }
+
+ static func >= (
+  lhs: Self, rhs: @escaping @autoclosure () async throws -> Output
+ ) async rethrows -> Assertion<ID, Output, Output> {
+  Assertion(id: lhs.id, lhs: lhs.callAsFunction, operator: >=, rhs: rhs)
  }
 }
 
 public extension AsyncFunction where Output: Equatable & Comparable {
- static func <= (lhs: Self, rhs: Output) -> Assertion<ID, Output, Output> {
-  Assertion(id: lhs.id, lhs.callAsyncFunction, <=, rhs)
+ static func <= (
+  lhs: Self, rhs: @escaping @autoclosure () throws -> Output
+ ) rethrows -> Assertion<ID, Output, Output> {
+  Assertion(id: lhs.id, lhs: lhs.callAsFunction, operator: <=, rhs: rhs)
  }
 
- static func >= (lhs: Self, rhs: Output) -> Assertion<ID, Output, Output> {
-  Assertion(id: lhs.id, lhs.callAsyncFunction, >=, rhs)
+ static func <= (
+  lhs: Self, rhs: @escaping @autoclosure () async throws -> Output
+ ) async rethrows -> Assertion<ID, Output, Output> {
+  Assertion(id: lhs.id, lhs: lhs.callAsFunction, operator: <=, rhs: rhs)
+ }
+
+ static func >= (
+  lhs: Self, rhs: @escaping @autoclosure () throws -> Output
+ ) rethrows -> Assertion<ID, Output, Output> {
+  Assertion(id: lhs.id, lhs: lhs.callAsFunction, operator: >=, rhs: rhs)
+ }
+
+ static func >= (
+  lhs: Self, rhs: @escaping @autoclosure () async throws -> Output
+ ) async rethrows -> Assertion<ID, Output, Output> {
+  Assertion(id: lhs.id, lhs: lhs.callAsFunction, operator: >=, rhs: rhs)
  }
 }
 
@@ -634,7 +654,7 @@ public struct Blackhole<ID: Hashable>: AsyncFunction {
   self.perform = { _ = perform }
  }
 
- public func callAsyncFunction() async throws { try await perform() }
+ public func callAsFunction() async throws { try await perform() }
 }
 
 /// Executes a return funtion while minimizing compiler optimizations that could
@@ -659,168 +679,21 @@ public struct Identity<ID: Hashable, Output: Sendable>: AsyncFunction {
 
  public init(
   _ id: ID,
-  _ result: @escaping @autoclosure () throws -> Output
+  _ result: @Sendable @escaping @autoclosure () throws -> Output
  ) {
   self.id = id
   self.result = result
  }
 
- public init(_ result: @escaping @autoclosure () throws -> Output)
+ public init(_ result: @Sendable @escaping @autoclosure () throws -> Output)
   where ID == EmptyID {
   self.result = result
  }
 
- public func callAsyncFunction() async throws -> Output {
+ public func callAsFunction() async throws -> Output {
   try await result()
  }
 }
-
-/* MARK: - Benchmarks Support */
-#if canImport(Benchmarks)
-import Benchmarks
-@_exported import Time
-
-/// A module that benchmarks functions
-extension Benchmarks: TestProtocol {
- public func callAsTest() async throws {
-  try await setUp()
-
-  do {
-   let results = try await self()
-   // print benchmark results
-   for offset in results.keys.sorted() {
-    let result = results[offset]!
-    let title = result.id ?? "Benchmark " + (offset + 1).description
-    let size = result.size
-    let average = result.average
-
-    print(
-     "[ " + title.applying(color: .cyan, style: .bold) + " ]",
-     "\("called \(size) times", style: .boldDim)",
-     "\("average", color: .cyan, style: .bold)" + .space +
-      "\(average.description + .space, style: .boldDim)"
-    )
-
-    let results = result.results._validResults
-
-    if results.notEmpty {
-     print(
-      String.space,
-      "\("return", style: .boldDim)",
-      "\("\(results[0])".readableRemovingQuotes, style: .bold)"
-     )
-    }
-   }
-
-   try await onCompletion()
-   try await cleanUp()
-  } catch {
-   try await cleanUp()
-   throw error
-  }
- }
-
- init(
-  id: ID?,
-  setUp: (() async throws -> ())? = nil,
-  onCompletion: (() async throws -> ())? = nil,
-  cleanUp: (() async throws -> ())? = nil,
-  benchmarks: @escaping () -> [any BenchmarkProtocol]
- ) {
-  self.init()
-  self.id = id
-  setup = setUp
-  complete = onCompletion
-  cleanup = cleanUp
-  items = benchmarks
- }
-
- public typealias Modules = BenchmarkModules<ID>
-}
-
-/// A module that benchmarks other modules
-public struct BenchmarkModules<ID: Hashable>: TestProtocol {
- let benchmarks: Benchmarks<ID>
- public var id: ID? { benchmarks.id }
- public init(
-  _ id: ID,
-  warmup: Size = .zero,
-  iterations: Size = 10,
-  timeout: Double = 5.0,
-  setUp: (() async throws -> ())? = nil,
-  onCompletion: (() async throws -> ())? = nil,
-  cleanUp: (() async throws -> ())? = nil,
-  @Modular modules: @escaping () -> [any Module]
- ) {
-  benchmarks = .init(
-   id: id,
-   setUp: setUp,
-   onCompletion: onCompletion,
-   cleanUp: cleanUp,
-   benchmarks: {
-    let modules = modules()
-    return modules.map { module -> any BenchmarkProtocol in
-     let id = module.idString
-     if let task = module as? any AsyncFunction {
-      return Measure.Async(
-       id, warmup: warmup, iterations: iterations, timeout: timeout,
-       perform: task.callAsyncFunction
-      )
-     } else {
-      return Measure.Async(
-       id, warmup: warmup, iterations: iterations, timeout: timeout,
-       perform: module.callAsFunction
-      )
-     }
-    }
-   }
-  )
- }
-
- public init(
-  warmup: Size = .zero,
-  iterations: Size = 10,
-  timeout: Double = 5.0,
-  setUp: (() async throws -> ())? = nil,
-  onCompletion: (() async throws -> ())? = nil,
-  cleanUp: (() async throws -> ())? = nil,
-  @Modular modules: @escaping () -> [any Module]
- ) where ID == EmptyID {
-  benchmarks = Benchmarks(
-   id: nil,
-   setUp: setUp,
-   onCompletion: onCompletion,
-   cleanUp: cleanUp,
-   benchmarks: {
-    let modules = modules()
-    return modules.map { module -> any BenchmarkProtocol in
-     let id = module.idString
-     if let task = module as? any AsyncFunction {
-      return Measure.Async(
-       id, warmup: warmup, iterations: iterations, timeout: timeout,
-       perform: task.callAsyncFunction
-      )
-     } else {
-      return Measure.Async(
-       id, warmup: warmup, iterations: iterations, timeout: timeout,
-       perform: module.callAsFunction
-      )
-     }
-    }
-   }
-  )
- }
-
- public func callAsTest() async throws {
-  try await benchmarks.callAsTest()
- }
-}
-
-public extension TestProtocol {
- typealias Benchmark<A> = Benchmarks<A> where A: Hashable
- typealias BenchmarkModule<A> = BenchmarkModules<A> where A: Hashable
-}
-#endif
 
 public struct Catch<ID: Hashable, Failure: Swift.Error & Sendable>:
  @unchecked Sendable, Testable {

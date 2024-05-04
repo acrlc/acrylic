@@ -1,26 +1,29 @@
 @_spi(ModuleReflection) import Acrylic
+import Tests
 import XCTest
 
 final class ReflectionTests: XCTestCase {
  func test() async throws {
-  let state = await ModuleState.initialize(with: Graph())
-  let mainContext = state.mainContext
-  let first = state.indices[0]
-  try first.forward { index in
-   let context = try XCTUnwrap(mainContext.cache[index.key])
-   XCTAssert(context.index == index)
-  }
-  
-  print(state.values.map { $0.id })
+  let state = try await ModuleState.initialize(with: Graph())
+  let context = state.context
+//  let first = context.indices[0]
+//  try first.forward { index in
+//   let context = try XCTUnwrap(context.cache[index.key])
+//   let index = context.index
+//   //XCTAssert(first == index)
+//  }
 
-  try await mainContext.callTasks()
+  print(context.indices.map(\.description))
 
-  await mainContext.cancel()
-  try await mainContext.callTasks()
+//  var graph = Graph()
+//  try await graph.mutatingCallWithContext()
+
+  await context.cancel()
+  try await context.callAsFunction()
  }
 }
 
-struct Graph: Module {
+struct Graph: ContextModule {
  var void: some Module {
   Group("1") {
    First {

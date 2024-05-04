@@ -34,11 +34,11 @@ public typealias DynamicProperties = [
 
 extension [(label: String, keyPath: AnyKeyPath, property: any DynamicProperty)]:
  @unchecked Sendable {}
-
 extension AnyKeyPath: @unchecked Sendable {}
 
-public protocol ContextualProperty: DynamicProperty {
- var id: AnyHashable { get set }
+// MARK: - Context Properties
+public protocol ContextualProperty: Identifiable, DynamicProperty {
+ var id: Int { get set }
  var context: ModuleContext { get }
  @inlinable
  mutating func initialize()
@@ -46,15 +46,15 @@ public protocol ContextualProperty: DynamicProperty {
  mutating func initialize(with context: ModuleContext) async
 }
 
+@Reflection
 public extension ContextualProperty {
  @_disfavoredOverload
  mutating func initialize() {}
  @_disfavoredOverload
  mutating func initialize(with context: ModuleContext) {}
- @inlinable
  func move(from previous: ModuleContext, to context: ModuleContext) {
   assert(previous != context, "previous context cannot be assigned to property")
-  
+
   if previous != context {
    let id = id
    if context.values[id] != nil {
@@ -64,24 +64,53 @@ public extension ContextualProperty {
  }
 }
 
+// MARK: - ContextProperty
 @propertyWrapper
 public struct
 ContextProperty<Value: Sendable>: @unchecked Sendable, ContextualProperty {
- public var id = AnyHashable(UUID())
- public unowned var context: ModuleContext = .shared
+ public var id = UUID().hashValue
+ public unowned var context: ModuleContext = .unknown
 
  @usableFromInline
  var initialValue: Value?
 
- @inlinable
- public mutating func initialize() {
-//  if let initialValue {
-//   await context.values[id] = initialValue
-//   self.initialValue = nil
-//  }
+ private let lock = ReadWriteLock()
+ public var wrappedValue: Value {
+  get {
+   lock.withReaderLock {
+    if let value = context.values[id] as? Value {
+     return value
+    } else
+    if let optional = context.values[id] as? Value?, let value = optional {
+     return value
+    } else {
+     assert(
+      initialValue != nil,
+      "Please set \(Self.self) within an initializer or on the property"
+     )
+     return initialValue.unsafelyUnwrapped
+    }
+   }
+  }
+  nonmutating set {
+   lock.withWriterLock { context.values[self.id] = newValue }
+  }
  }
 
+ public init() {}
  @inlinable
+ public var projectedValue: Self { self }
+}
+
+@Reflection
+extension ContextProperty {
+ public mutating func initialize() {
+  if let initialValue {
+   context.values[id] = initialValue
+   self.initialValue = nil
+  }
+ }
+ 
  public mutating func initialize(with context: ModuleContext) {
   if let initialValue {
    let id = id
@@ -92,31 +121,6 @@ ContextProperty<Value: Sendable>: @unchecked Sendable, ContextualProperty {
   }
   self.context = context
  }
-
- @inlinable
- public var wrappedValue: Value {
-  get {
-   if let value = context.values[id] as? Value {
-    return value
-   } else
-   if let optional = context.values[id] as? Value?, let value = optional {
-    return value
-   } else {
-    assert(
-     initialValue != nil,
-     "set \(Self.self) within an initializer or on the property"
-    )
-    return initialValue.unsafelyUnwrapped
-   }
-  }
-  nonmutating set {
-   context.values[self.id] = newValue
-  }
- }
-
- public init() {}
- @inlinable
- public var projectedValue: Self { self }
 }
 
 public extension ContextProperty {
@@ -139,12 +143,12 @@ public extension ContextProperty {
 }
 
 public extension ContextProperty {
- func callAsFunction() {
+ func callAsFunction() async throws {
   assert(
-   context != .shared,
+   context != .unknown,
    "cannot called shared context, states must be initialized before handling"
   )
-  context.callAsFunction()
+  try await context.callAsFunction()
  }
 
  @discardableResult
@@ -152,20 +156,22 @@ public extension ContextProperty {
   _ body: @escaping () throws -> A
  ) rethrows -> A {
   assert(
-   context != .shared,
+   context != .unknown,
    "cannot called shared context, states must be initialized before handling"
   )
-  defer { self.context.callAsFunction() }
+  defer { Task { try await self.context.callAsFunction() } }
   return try body()
  }
 
- func callAsFunction(_ newValue: @escaping @autoclosure () -> Value = ()) {
+ func callAsFunction(
+  _ newValue: @escaping @autoclosure () -> Value = ()
+ ) async throws {
   assert(
-   context != .shared,
+   context != .unknown,
    "cannot called shared context, states must be initialized before handling"
   )
   wrappedValue = newValue()
-  context.callAsFunction()
+  try await context.callAsFunction()
  }
 }
 
@@ -193,7 +199,9 @@ public extension ContextProperty {
   _ value: @escaping (inout Value) throws -> A
  ) rethrows -> A {
   defer {
-   self.callAsFunction()
+   Task {
+    try await self.callAsFunction()
+   }
    context.objectWillChange.send()
   }
   return try value(&wrappedValue)
@@ -206,7 +214,9 @@ public extension ContextProperty {
 
  func callState(_ newValue: Value) {
   wrappedValue = newValue
-  callAsFunction()
+  Task {
+   try await callAsFunction()
+  }
   context.objectWillChange.send()
  }
 
