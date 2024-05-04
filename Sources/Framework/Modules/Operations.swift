@@ -31,6 +31,7 @@ public struct AsyncTask
  }
 
  @_spi(ModuleReflection)
+ @_transparent
  public func callAsFunction() async throws -> Output? {
   try await perform()
  }
