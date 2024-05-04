@@ -29,7 +29,6 @@ public extension Function {
 }
 
 public extension Function where Output == Never {
- @_spi(ModuleReflection)
  @_disfavoredOverload
  func callAsFunction() -> Never {
   fatalError("\(_type) '\(Self.self)' should define \(#function)")
@@ -67,17 +66,9 @@ public extension AsyncFunction {
   copy.detached = detached
   return copy
  }
-
- @_spi(ModuleReflection)
- @_disfavoredOverload
- @inlinable
- func callAsFunction() async throws -> Output {
-  fatalError("\(_type) '\(Self.self)' should define \(#function)")
- }
 }
 
 public extension AsyncFunction where Output == Never {
- @_spi(ModuleReflection)
  @_disfavoredOverload
  func callAsFunction() async throws -> Never {
   fatalError("\(_type) '\(Self.self)' should define \(#function)")
@@ -148,25 +139,13 @@ public extension Modules {
 }
 
 // A protocol for running `@main` functions
-public protocol MainFunction: Function {
+public protocol MainFunction: Module {
  init()
- @inlinable
- mutating func main() async throws
-}
-
-public extension MainFunction where Output == Never {
- @_disfavoredOverload
- @inlinable
- func main() async throws {
-  try await callAsVoid()
- }
 }
 
 public extension MainFunction {
- @inlinable
  static func main() async throws {
-  var module = Self()
-  try await module.main()
+  try await Self().callWithContext()
  }
 }
 

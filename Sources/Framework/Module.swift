@@ -53,9 +53,7 @@ public extension Module {
  }
 
  @_spi(ModuleReflection)
- @_disfavoredOverload
  @Reflection
- @inlinable
  mutating func mutatingCallWithContext(id: AnyHashable? = nil) async throws {
   let key = id?.hashValue ?? __key
   let shouldUpdate = Reflection.states[key] != nil
@@ -81,21 +79,20 @@ public extension Module {
  }
 
  @_spi(ModuleReflection)
- @_disfavoredOverload
- @inlinable
+ @Reflection
  func callWithContext(id: AnyHashable? = nil) async throws {
   let key = id?.hashValue ?? __key
-  let shouldUpdate = await Reflection.states[key] != nil
+  let shouldUpdate = Reflection.states[key] != nil
 
   if !shouldUpdate {
-   try await Reflection.cacheIfNeeded(
+  try await Reflection.asyncCacheIfNeeded(
     id: key,
     module: self,
     stateType: ModuleState.self
    )
   }
-
-  let state = await Reflection.states[key].unsafelyUnwrapped
+  
+  let state = Reflection.states[key].unsafelyUnwrapped
   let context = state.context
 
   if shouldUpdate {
