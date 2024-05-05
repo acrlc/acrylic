@@ -9,7 +9,7 @@ public final class TestState<A: Testable>: StateActor, @unchecked Sendable {
  var timer = Timer()
 
  public required init() {}
- 
+
  @Reflection
  @discardableResult
  public func update() async throws -> (any Module)? {
@@ -25,13 +25,13 @@ public final class TestState<A: Testable>: StateActor, @unchecked Sendable {
   }
 
   assert(
-   module.notEmpty, 
+   module.notEmpty,
    """
    `\(module)` is empty, modules within `\(#function)` cannot be empty, \
    especially when conforming to `ExpressibleAsEmpty`.
    """
   )
-  
+
   let key = index.key
   let context = cached(index, key: key) ?? context
 
@@ -62,7 +62,6 @@ extension Tasks {
   context: ModuleContext,
   with state: isolated TestState<some Testable>
  ) async throws -> [Int: Sendable]? {
-  let current = queue.map(\.1)
   let module = index.element
 
   let isTest = module is any TestProtocol
@@ -102,7 +101,7 @@ extension Tasks {
    }
   }
 
-  guard current.filter({ !$0.detached }).notEmpty else {
+  guard queue.filter({ !$1.detached }).notEmpty else {
    return nil
   }
 
@@ -121,23 +120,19 @@ extension Tasks {
    var results: [Int: Sendable] = .empty
 
    state.timer.fire()
-   for task in current {
-    let key = task.id
-
+   for (key, task) in queue {
     if task.detached {
-     detached[key] = Task { try await task() }
+     detached.append((key, Task { try await task.perform() }))
     }
     else {
-     results[key] = try await task()
+     results[key] = try await task.perform()
     }
    }
 
    endTime = timer.elapsed.description
 
-   for (_, task) in detached {
-    try await task.wait()
-   }
-
+   try await self.waitForDetached()
+   
    let key = index.key
    var result = results[key].unsafelyUnwrapped
    var valid = true
@@ -257,9 +252,7 @@ public extension Reflection {
    let initialState = TestState<A>()
    unowned var state: TestState<A> {
     get { states[key].unsafelyUnwrapped as! TestState<A> }
-    set {
-     states[key] = newValue
-    }
+    set { states[key] = newValue }
    }
 
    initialState.bind([module])
@@ -280,7 +273,7 @@ extension TestProtocol {
  func _finalizeTest(
   with index: ModuleIndex, context: ModuleContext, key: Int
  ) -> any Module {
-  context.tasks[queue: key] = AsyncTask<Output, any Error>(id: key) {
+  context.tasks[queue: key] = AsyncTask {
    var copy = self
    defer { index.checkedElement = copy }
    return try await copy.callAsTest()

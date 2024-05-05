@@ -1,6 +1,7 @@
 import struct Core.UnsafeRecursiveNode
 @_spi(Reflection) import func ReflectionMirror._forEachFieldWithKeyPath
 
+@_spi(ModuleReflection)
 public protocol StateActor: Sendable {
  nonisolated(unsafe) var context: ModuleContext { get }
  @Reflection
@@ -17,6 +18,7 @@ public typealias ModulePointer = UnsafeMutablePointer<any Module>
 extension ModuleIndex: @unchecked Sendable {}
 
 // MARK: - Default Implementation
+@_spi(ModuleReflection)
 public actor ModuleState: @unchecked Sendable, StateActor {
  public static var unknown: Self { Self() }
  public nonisolated(unsafe) var context = ModuleContext()
@@ -98,9 +100,9 @@ public extension ModuleIndex {
 @_spi(ModuleReflection)
 @Reflection
 public extension StateActor {
- static func initialize<A: Module>(
+ static func initialize(
   id: AnyHashable? = nil,
-  with module: A
+  with module: some Module
  ) async throws -> Self {
   let key = (id?.base as? Int) ?? id?.hashValue ?? module.__key
 
@@ -108,17 +110,15 @@ public extension StateActor {
    let initialState: Self = .unknown
    var state: Self {
     get { Reflection.states[key].unsafelyUnwrapped as! Self }
-    set {
-     Reflection.states[key] = newValue
-    }
+    set { Reflection.states[key] = newValue }
    }
-   
+
    initialState.bind([module])
    let index = initialState.context.index
-   
+
    index.element.prepareContext(from: index, actor: initialState)
    try await initialState.update()
-   
+
    state = initialState
    return initialState
   }
@@ -129,8 +129,8 @@ public extension StateActor {
 @_spi(ModuleReflection)
 public extension StateActor {
  func bind(_ base: Modules) {
-  let basePointer = withUnsafeMutablePointer(to: &context.modules, { $0 })
-  let indicesPointer = withUnsafeMutablePointer(to: &context.indices, { $0 })
+  let basePointer = withUnsafeMutablePointer(to: &context.modules) { $0 }
+  let indicesPointer = withUnsafeMutablePointer(to: &context.indices) { $0 }
 
   basePointer.pointee.append(contentsOf: base)
   indicesPointer.pointee.append(context.index)
@@ -170,8 +170,8 @@ public extension Function {
   on index: ModuleIndex,
   from context: ModuleContext, with key: Int
  ) -> Self {
-  context.tasks[queue: key] = AsyncTask<Output, any Error>(
-   id: key, priority: priority, detached: detached
+  context.tasks[queue: key] = AsyncTask(
+   priority: priority, detached: detached
   ) {
    try self.callAsFunction()
   }
@@ -186,10 +186,8 @@ public extension AsyncFunction {
   on index: ModuleIndex,
   from context: ModuleContext, with key: Int
  ) -> Self {
-  context.tasks[queue: key] = AsyncTask<Output, any Error>(
-   id: key,
-   priority: priority,
-   detached: detached
+  context.tasks[queue: key] = AsyncTask(
+   priority: priority, detached: detached
   ) {
    try await self.callAsFunction()
   }
@@ -374,7 +372,7 @@ public extension Module {
    return filtered(substrings)
   }
  }
- 
+
  @_transparent
  var typeConstructorName: String { Self.typeConstructorName }
 

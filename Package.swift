@@ -19,6 +19,9 @@ let package = Package(
    url: "https://github.com/philipturner/swift-reflection-mirror.git",
    branch: "main"
   ),
+  .package(
+   url: "https://github.com/apple/swift-collections.git", from: "1.1.0"
+  ),
   // for Tests library
   .package(url: "https://github.com/acrlc/Time.git", branch: "main"),
   .package(url: "https://github.com/acrlc/Shell.git", branch: "main"),
@@ -33,7 +36,9 @@ let package = Package(
    dependencies: [
     "Core",
     .product(name: "Extensions", package: "core"),
-    .product(name: "ReflectionMirror", package: "swift-reflection-mirror")
+    .product(name: "ReflectionMirror", package: "swift-reflection-mirror"),
+    .product(name: "OrderedCollections", package: "swift-collections"),
+    .product(name: "Collections", package: "swift-collections")
    ],
    path: "Sources/Framework"
   ),
@@ -55,6 +60,7 @@ let package = Package(
    dependencies: [
     "Acrylic",
     "Tests",
+    .product(name: "Extensions", package: "core"),
     "ModuleFunctions",
     "Configuration",
     "Time",

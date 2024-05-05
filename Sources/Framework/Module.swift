@@ -42,15 +42,28 @@ public extension Module {
   }
   return ()
  }
+ 
+ @_spi(ModuleReflection)
+ @inline(__always)
+ var __erasedID: AnyHashable? {
+  AnyHashable(id)
+ }
 
  @_spi(ModuleReflection)
- var __key: Int {
-  !(ID.self is Never.Type) && !(ID.self is EmptyID.Type) &&
-   String(describing: id).readableRemovingQuotes != "nil" ?
-   id.hashValue : (
-    Swift._mangledTypeName(Self.self) ?? String(describing: Self.self)
-   ).hashValue
+ @inline(__always)
+ var __id: String {
+  if !(ID.self is Never.Type), !(ID.self is EmptyID.Type) {
+   let id = String(describing: id).readableRemovingQuotes
+   if id != "nil" {
+    return id
+   }
+  }
+  return Swift._mangledTypeName(Self.self) ?? typeConstructorName
  }
+
+ @_spi(ModuleReflection)
+ @inline(__always)
+ var __key: Int { __id.hashValue }
 
  @_spi(ModuleReflection)
  @Reflection
@@ -85,13 +98,13 @@ public extension Module {
   let shouldUpdate = Reflection.states[key] != nil
 
   if !shouldUpdate {
-  try await Reflection.asyncCacheIfNeeded(
+   try await Reflection.asyncCacheIfNeeded(
     id: key,
     module: self,
     stateType: ModuleState.self
    )
   }
-  
+
   let state = Reflection.states[key].unsafelyUnwrapped
   let context = state.context
 

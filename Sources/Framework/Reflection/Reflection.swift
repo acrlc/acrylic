@@ -2,29 +2,34 @@
 public actor Reflection:
  @unchecked Sendable, Identifiable, Equatable {
  public static let shared = Reflection()
+ @_spi(ModuleReflection)
  public nonisolated(unsafe) var states: [Int: StateActor] = .empty
 
+ @_spi(ModuleReflection)
  @Reflection
  public static var states: [Int: StateActor] {
   get { shared.states }
   set { shared.states = newValue }
  }
 
- @Reflection
- static func run<Result>(
-  body: @escaping (isolated Reflection) throws -> Result
- ) rethrows -> Result {
-  try Reflection.shared.assumeIsolated { reflection in
-   try body(reflection)
-  }
+ public static func assumeIsolated<T>(
+  _ operation: @escaping () throws -> T,
+  file: StaticString = #fileID,
+  line: UInt = #line
+ ) rethrows -> T {
+  try Reflection.shared.assumeIsolated(
+   { _ in try operation() },
+   file: file,
+   line: line
+  )
  }
 
-// @Reflection
-// static func run<Result: Sendable>(
-//  body: @Sendable @Reflection @escaping () throws -> Result
-// ) async rethrows -> Result {
-//  try await Task(operation: body).wait()
-// }
+ @Reflection
+ static func run<T: Sendable>(
+  resultType: T.Type = T.self, body: @Reflection () throws -> T
+ ) async rethrows -> T {
+  try body()
+ }
 
  public static func == (lhs: Reflection, rhs: Reflection) -> Bool {
   lhs.id == rhs.id
@@ -42,14 +47,12 @@ extension Reflection {
   stateType: B.Type
  ) -> B {
   let key = A._mangledName.hashValue
-  
+
   guard let state = states[key] as? B else {
    let initialState: B = .unknown
    var state: B {
     get { states[key].unsafelyUnwrapped as! B }
-    set {
-     states[key] = newValue
-    }
+    set { states[key] = newValue }
    }
 
    // store state so it can be referenced from `Reflection.states`
@@ -74,14 +77,12 @@ extension Reflection {
   stateType: B.Type
  ) -> B {
   let key = A._mangledName.hashValue
-  
+
   guard let state = states[key] as? B else {
    let initialState: B = .unknown
    var state: B {
     get { states[key].unsafelyUnwrapped as! B }
-    set {
-     states[key] = newValue
-    }
+    set { states[key] = newValue }
    }
 
    initialState.bind([A.shared])
@@ -134,14 +135,12 @@ extension Reflection {
   stateType: A.Type
  ) async throws -> A {
   let key = (id.base as? Int) ?? id.hashValue
-  
+
   guard let state = states[key] as? A else {
    let initialState: A = .unknown
    var state: A {
     get { states[key].unsafelyUnwrapped as! A }
-    set {
-     states[key] = newValue
-    }
+    set { states[key] = newValue }
    }
 
    initialState.bind([module])
@@ -164,14 +163,12 @@ extension Reflection {
   stateType: A.Type
  ) -> A {
   let key = (id.base as? Int) ?? id.hashValue
-  
+
   guard let state = states[key] as? A else {
    let initialState: A = .unknown
    var state: A {
     get { states[key].unsafelyUnwrapped as! A }
-    set {
-     states[key] = newValue
-    }
+    set { states[key] = newValue }
    }
 
    state = initialState
@@ -194,14 +191,12 @@ extension Reflection {
   stateType: A.Type
  ) async throws -> A {
   let key = (id.base as? Int) ?? id.hashValue
-  
+
   guard let state = states[key] as? A else {
    let initialState: A = .unknown
    var state: A {
     get { states[key].unsafelyUnwrapped as! A }
-    set {
-     states[key] = newValue
-    }
+    set { states[key] = newValue }
    }
 
    state = initialState
@@ -225,14 +220,12 @@ extension Reflection {
   stateType: A.Type
  ) async throws -> ModulePointer {
   let key = (id.base as? Int) ?? id.hashValue
-  
+
   guard let state = states[key] as? A else {
    let initialState: A = .unknown
    var state: A {
     get { states[key].unsafelyUnwrapped as! A }
-    set {
-     states[key] = newValue
-    }
+    set { states[key] = newValue }
    }
 
    state.bind([module])
@@ -275,11 +268,11 @@ public extension Module {
  func contextInfo(_ id: AnyHashable? = nil) -> [String] {
   let key = id?.hashValue ?? __key
   let states = Reflection.shared.states
-  
+
   guard let state = states[key] else {
    return .empty
   }
-  
+
   let context = state.context
   let cache = context.cache
 
