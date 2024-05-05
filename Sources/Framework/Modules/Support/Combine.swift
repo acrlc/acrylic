@@ -11,37 +11,37 @@ public extension Module {
 }
 
 public extension CombineModules {
- struct Sink<ID: Hashable, Value>: Function {
+ struct Sink<ID: Hashable, Output>: Function {
   public var id: ID?
   public var priority: TaskPriority?
   public var detached = true
 
-  let publisher: Published<Value>.Publisher
-  let perform: (_ newValue: Value) throws -> ()
+  let publisher: AnyPublisher<Output, Never>
+  let perform: (_ recievedValue: Output) throws -> ()
 
-  public init(
+  public init<P>(
    _ id: ID,
    priority: TaskPriority? = nil, detached: Bool = true,
-   on publisher: Published<Value>.Publisher,
+   on publisher: P,
    @_implicitSelfCapture perform:
-   @escaping (_ recievedValue: Value) throws -> ()
-  ) {
+   @escaping (_ recievedValue: P.Output) throws -> ()
+  ) where P: Publisher, P.Failure == Never, Output == P.Output {
    self.id = id
    self.priority = priority
    self.detached = detached
-   self.publisher = publisher
+   self.publisher = publisher.eraseToAnyPublisher()
    self.perform = perform
   }
 
-  public init(
+  public init<P>(
    priority: TaskPriority? = nil, detached: Bool = true,
-   on publisher: Published<Value>.Publisher,
+   on publisher: P,
    @_implicitSelfCapture perform:
-   @escaping (_ recievedValue: Value) throws -> ()
-  ) where ID == EmptyID {
+   @escaping (_ recievedValue: Output) throws -> ()
+  ) where P: Publisher, P.Failure == Never, Output == P.Output, ID == EmptyID {
    self.priority = priority
    self.detached = detached
-   self.publisher = publisher
+   self.publisher = publisher.eraseToAnyPublisher()
    self.perform = perform
   }
 
@@ -56,31 +56,32 @@ public extension CombineModules {
    public var priority: TaskPriority?
    public var detached = true
 
-   let publisher: Published<Value>.Publisher
-   let perform: @Sendable (_ recievedValue: Value) async throws -> ()
+   let publisher: AnyPublisher<Output, Never>
+   let perform: @Sendable (_ recievedValue: Output) async throws -> ()
 
-   public init(
-    _ id: ID, priority: TaskPriority? = nil, detached: Bool = true,
-    on publisher: Published<Value>.Publisher,
+   public init<P>(
+    _ id: ID,
+    priority: TaskPriority? = nil, detached: Bool = true,
+    on publisher: P,
     @_implicitSelfCapture perform:
-    @Sendable @escaping (_ recievedValue: Value) async throws -> ()
-   ) {
+    @Sendable @escaping (_ recievedValue: Output) async throws -> ()
+   ) where P: Publisher, P.Failure == Never, Output == P.Output {
     self.id = id
     self.priority = priority
     self.detached = detached
-    self.publisher = publisher
+    self.publisher = publisher.eraseToAnyPublisher()
     self.perform = perform
    }
 
-   public init(
+   public init<P>(
     priority: TaskPriority? = nil, detached: Bool = true,
-    on publisher: Published<Value>.Publisher,
+    on publisher: P,
     @_implicitSelfCapture perform:
-    @Sendable @escaping (_ recievedValue: Value) async throws -> ()
-   ) where ID == EmptyID {
+    @Sendable @escaping (_ recievedValue: Output) async throws -> ()
+   ) where P: Publisher, P.Failure == Never, Output == P.Output, ID == EmptyID {
     self.priority = priority
     self.detached = detached
-    self.publisher = publisher
+    self.publisher = publisher.eraseToAnyPublisher()
     self.perform = perform
    }
 
