@@ -2,4 +2,6 @@
 /.build
 /.swiftpm
 /Package.resolved
+# package extras
 /Macros
+/Sources/Framework/Reflection/Utilities/Misc.swift
