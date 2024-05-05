@@ -93,6 +93,12 @@ public extension ContextModule {
   }
  }
  
+ nonisolated func cancelContext() {
+  Task {
+   await Self.cancelContext()
+  }
+ }
+
  nonisolated func cancelContext(with state: ModuleContext.State) {
   Task {
    await Self.cancelContext(with: state)
