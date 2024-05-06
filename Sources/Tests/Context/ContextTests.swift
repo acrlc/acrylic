@@ -50,7 +50,7 @@ struct TestContext: Tests {
    ///  If state is marked as `terminal` a ``CancellationError`` will be thrown.
    /// This is used to dismiss updates when called in succession ...
    Assert("Dismiss Terminal State") {
-    do { try await context.update() }
+    do { try await context.update(with: .terminal) }
     catch where error is CancellationError {
      notify("Successfully cancelled update")
      return true

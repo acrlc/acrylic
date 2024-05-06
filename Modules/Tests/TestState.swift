@@ -255,13 +255,14 @@ public extension Reflection {
     set { states[key] = newValue }
    }
 
+   state = initialState
    initialState.bind([module])
+   
    let index = initialState.context.index
 
    index.element.prepareContext(from: index, actor: initialState)
    try await initialState.update()
 
-   state = initialState
    return (false, initialState)
   }
   return (true, state)

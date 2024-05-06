@@ -12,6 +12,7 @@ public actor Reflection:
   set { shared.states = newValue }
  }
 
+ @_spi(ModuleReflection)
  public static func assumeIsolated<T>(
   _ operation: @escaping () throws -> T,
   file: StaticString = #fileID,
@@ -23,14 +24,37 @@ public actor Reflection:
    line: line
   )
  }
-
+ 
+ @_spi(ModuleReflection)
  @Reflection
- static func run<T: Sendable>(
+ public static func run<T: Sendable>(
   resultType: T.Type = T.self, body: @Reflection () throws -> T
- ) async rethrows -> T {
+ ) rethrows -> T {
   try body()
  }
 
+ @_spi(ModuleReflection)
+ public static func assumeIsolatedModify<T>(
+  resultType: T.Type = T.self, 
+  _ operation:  @escaping (isolated Reflection) throws -> T,
+  file: StaticString = #fileID,
+  line: UInt = #line
+ ) rethrows -> T {
+  try Reflection.shared.assumeIsolated(
+   {  try operation($0) },
+   file: file,
+   line: line
+  )
+ }
+ 
+ @_spi(ModuleReflection)
+ @Reflection
+ public static func modify<T: Sendable>(
+  resultType: T.Type = T.self, body: @Reflection (Reflection) throws -> T
+ ) rethrows -> T {
+  try body(shared)
+ }
+ 
  public static func == (lhs: Reflection, rhs: Reflection) -> Bool {
   lhs.id == rhs.id
  }
@@ -56,7 +80,9 @@ extension Reflection {
    }
 
    // store state so it can be referenced from `Reflection.states`
+   state = initialState
    initialState.bind([A.shared])
+   
    let index = initialState.context.index
 
    index.element.prepareContext(from: index, actor: initialState)
@@ -65,7 +91,6 @@ extension Reflection {
     try await initialState.update()
    }
 
-   state = initialState
    return initialState
   }
   return state
@@ -85,6 +110,7 @@ extension Reflection {
     set { states[key] = newValue }
    }
 
+   state = initialState
    initialState.bind([A.shared])
 
    let index = initialState.context.index
@@ -96,7 +122,6 @@ extension Reflection {
     try await initialState.context.callTasks()
    }
 
-   state = initialState
    return initialState
   }
   let context = state.context
@@ -143,13 +168,14 @@ extension Reflection {
     set { states[key] = newValue }
    }
 
+   state = initialState
    initialState.bind([module])
+   
    let index = initialState.context.index
 
    index.element.prepareContext(from: index, actor: initialState)
 
    try await initialState.update()
-   state = initialState
    return initialState
   }
   return state
@@ -227,15 +253,16 @@ extension Reflection {
     get { states[key].unsafelyUnwrapped as! A }
     set { states[key] = newValue }
    }
-
+   
+   state = initialState
    state.bind([module])
+   
    let index = initialState.context.index
 
    index.element.prepareContext(from: index, actor: initialState)
    try await initialState.update()
    try await initialState.context.callTasks()
 
-   state = initialState
    return withUnsafeMutablePointer(to: &index.element) { $0 }
   }
 

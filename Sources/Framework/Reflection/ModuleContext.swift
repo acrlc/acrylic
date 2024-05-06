@@ -9,12 +9,17 @@ open class ModuleContext:
  @_spi(ModuleReflection)
  public typealias Indices = ModuleIndex.Indices
 
- public enum State: Int8 {
+ public enum State: Int8, CaseIterable {
   case initial = -1, active, idle, terminal
+
+  static func += (_ lhs: inout Self, rhs: RawValue) {
+   lhs = Self(rawValue: lhs.rawValue + rhs) ?? .active
+  }
  }
 
  @Reflection
  public var state: State = .initial
+
  @_spi(ModuleReflection)
  public var actor: StateActor!
  public var tasks: Tasks = .empty
@@ -64,25 +69,23 @@ open class ModuleContext:
 @_spi(ModuleReflection)
 @Reflection
 public extension ModuleContext {
- @Tasks
- func callTasks() async throws {
-  try await tasks()
-
-  for index in indices[1...] {
-   try await cache[index.key].unsafelyUnwrapped.tasks()
-  }
- }
-
- nonisolated func invalidateSubrange() {
+ func invalidateSubrange() {
   indices.removeSubrange(1...)
   modules.removeSubrange(1...)
  }
 }
 
-// MARK: - Public
-@Reflection(unsafe)
+@_spi(ModuleReflection)
+@Tasks
 public extension ModuleContext {
- @Tasks
+ func callTasks() async throws {
+  try await tasks()
+
+  for index in indices[1...] {
+   try await cache[index.key]?.tasks()
+  }
+ }
+
  /// Cancels all tasks including the subsequent, while removing queued tasks
  ///
  func invalidate() {
@@ -103,17 +106,31 @@ public extension ModuleContext {
    context.cancel()
   }
  }
- 
+}
+
+// MARK: - Public
+public extension ModuleContext {
+ /// Cancels all tasks including the subsequent, while removing queued tasks
+ ///
+ func invalidate() async {
+  await tasks.invalidate()
+  for context in cache.values {
+   await context.invalidate()
+  }
+ }
+
+ /// Cancels all tasks including the subsequent, without removing queued tasks
+ ///
  func cancel() async {
   await tasks.cancel()
-  
+
   for context in cache.values {
    await context.cancel()
   }
  }
 
  /// Wait for the current call to finish, excluding detached tasks
- nonisolated func wait() async throws {
+ func wait() async throws {
   try await tasks.wait()
 
   for context in cache.values {
@@ -122,16 +139,29 @@ public extension ModuleContext {
  }
 
  /// Wait for all called tasks to finish, including detached tasks
- nonisolated func waitForAll() async throws {
+ func waitForAll() async throws {
   try await tasks.waitForAll()
 
   for context in cache.values {
    try await context.waitForAll()
   }
  }
+}
 
+@Reflection
+public extension ModuleContext {
  func callAsFunction() async throws {
-  try await update()
+  switch state {
+  case .active:
+   state = .terminal
+   try await actor.update()
+  case .idle:
+   state = .terminal
+   await cancel()
+  case .terminal:
+   throw CancellationError()
+  case .initial: break
+  }
 
   state = .active
   defer { state = .idle }
@@ -141,10 +171,14 @@ public extension ModuleContext {
 
  func update() async throws {
   switch state {
+  case .idle:
+   state = .terminal
+   defer { state = .idle }
+   await cancel()
   case .active:
    state = .terminal
+   defer { state = .idle }
    try await actor.update()
-  case .idle: await cancel()
   case .terminal:
    throw CancellationError()
   case .initial: break
@@ -180,8 +214,8 @@ public extension ModuleContext {
    context != nil,
    """
    invalid ID `\(id)` for \(#function), use `subscript(checkedID:)` to \
-   to unwrap, wait until context is loaded, or assign and identical ID to a \
-   contained module.
+   to unwrap, wait until context is loaded, or use an ID that mathes a module \
+   contained within `void`.
    """
   )
   return context.unsafelyUnwrapped
@@ -193,7 +227,6 @@ public extension ModuleContext {
  }
 }
 
-@Reflection(unsafe)
 public extension ModuleContext {
  @inline(__always)
  /// Restarts a subcontext based on a module's `id` property.

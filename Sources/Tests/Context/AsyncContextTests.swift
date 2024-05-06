@@ -54,7 +54,8 @@ struct TestAsyncContext: Testable {
     Task.detached {
      try await context.callAsFunction()
     }
-    context.cancel()
+    
+    await context.cancel()
     value.should = true
    }
 
@@ -124,7 +125,13 @@ struct TestAsyncContext: Testable {
     Measure.Async(
      "Update Active Context", warmup: 2, iterations: pressure * 333,
      perform: {
-      try await context.update(with: .active)
+      do {
+       try await context.update(with: .active)
+      } catch where error is CancellationError {
+       return
+      } catch {
+       throw error
+      }
      }
     )
     

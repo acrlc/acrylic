@@ -113,13 +113,14 @@ public extension StateActor {
     set { Reflection.states[key] = newValue }
    }
 
+   state = initialState
    initialState.bind([module])
+   
    let index = initialState.context.index
 
    index.element.prepareContext(from: index, actor: initialState)
    try await initialState.update()
 
-   state = initialState
    return initialState
   }
   return state
@@ -394,6 +395,16 @@ public extension Module {
    }
   }
   return nil
+ }
+
+ var debugDescription: String {
+  if isIdentifiable {
+   let desc = String(describing: id).readableRemovingQuotes
+   if desc != "nil" {
+    return "\(typeConstructorName) [\(desc)]"
+   }
+  }
+  return typeConstructorName
  }
 }
 
