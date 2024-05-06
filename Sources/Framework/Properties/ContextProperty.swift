@@ -93,7 +93,7 @@ ContextProperty<Value: Sendable>: @unchecked Sendable, ContextualProperty {
    }
   }
   nonmutating set {
-   lock.withWriterLock { context.values[self.id] = newValue }
+   lock.withWriterLockVoid { context.values[self.id] = newValue }
   }
  }
 
