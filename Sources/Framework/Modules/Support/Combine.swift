@@ -45,6 +45,32 @@ public extension CombineModules {
    self.perform = perform
   }
 
+  public init<P>(
+   _ id: ID,
+   priority: TaskPriority? = nil, detached: Bool = true,
+   on publisher: P,
+   @_implicitSelfCapture perform: @escaping () throws -> ()
+  ) where P: Publisher, P.Failure == Never, Output == P.Output, Output == Void {
+   self.id = id
+   self.priority = priority
+   self.detached = detached
+   self.publisher = publisher.eraseToAnyPublisher()
+   self.perform = { _ in try perform() }
+  }
+
+  public init<P>(
+   priority: TaskPriority? = nil, detached: Bool = true,
+   on publisher: P,
+   @_implicitSelfCapture perform: @escaping () throws -> ()
+  ) where
+   P: Publisher, P.Failure == Never, Output == P.Output, Output == Void,
+   ID == EmptyID {
+   self.priority = priority
+   self.detached = detached
+   self.publisher = publisher.eraseToAnyPublisher()
+   self.perform = { _ in try perform() }
+  }
+
   public func callAsFunction() -> AnyCancellable {
    publisher.sink { recievedValue in
     try? perform(recievedValue)
@@ -83,6 +109,33 @@ public extension CombineModules {
     self.detached = detached
     self.publisher = publisher.eraseToAnyPublisher()
     self.perform = perform
+   }
+
+   public init<P>(
+    _ id: ID,
+    priority: TaskPriority? = nil, detached: Bool = true,
+    on publisher: P,
+    @_implicitSelfCapture perform: @Sendable @escaping () async throws -> ()
+   ) where P: Publisher, P.Failure == Never, Output == P.Output,
+    Output == Void {
+    self.id = id
+    self.priority = priority
+    self.detached = detached
+    self.publisher = publisher.eraseToAnyPublisher()
+    self.perform = { _ in try await perform() }
+   }
+
+   public init<P>(
+    priority: TaskPriority? = nil, detached: Bool = true,
+    on publisher: P,
+    @_implicitSelfCapture perform: @Sendable @escaping () async throws -> ()
+   ) where
+    P: Publisher, P.Failure == Never, Output == P.Output, Output == Void,
+    ID == EmptyID {
+    self.priority = priority
+    self.detached = detached
+    self.publisher = publisher.eraseToAnyPublisher()
+    self.perform = { _ in try await perform() }
    }
 
    public func callAsFunction() -> AnyCancellable {
