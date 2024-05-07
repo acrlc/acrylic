@@ -46,7 +46,6 @@ public protocol AsyncFunction: Detachable, Module {
  typealias Priority = TaskPriority
  var priority: Priority? { get set }
  var detached: Bool { get set }
- @Sendable
  @inlinable
  @discardableResult
  func callAsFunction() async throws -> Output

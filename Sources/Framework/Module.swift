@@ -1,8 +1,7 @@
-public protocol Module: Identifiable, Sendable {
- override var id: ID { @Sendable get }
+public protocol Module: Identifiable {
  associatedtype VoidFunction: Module
  @Modular
- var void: VoidFunction { @Sendable get async throws }
+ var void: VoidFunction { get async throws }
 }
 
 public extension Module {
