@@ -88,7 +88,7 @@ struct TestTasks: Testable {
    // test normal operation
    tasks[queue: 1] = AsyncTask.detached {
     print("One", terminator: .space)
-    try await sleep(for: .seconds(1))
+    try await sleep(for: .milliseconds(100))
     return 1
    }
 
@@ -99,8 +99,9 @@ struct TestTasks: Testable {
    }
 
    tasks[queue: 3] = AsyncTask {
-    try await sleep(for: .seconds(1))
+    try await sleep(for: .milliseconds(100))
     print("Three")
+    try await sleep(for: .milliseconds(100))
     return 3
    }
 
