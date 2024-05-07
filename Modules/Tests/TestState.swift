@@ -93,7 +93,7 @@ extension Tasks {
       print(
        "\n[ \(label, style: .bold) ]",
        "\("starting", color: .cyan)",
-       "\(name, color: .cyan, style: .bold)",
+       "\((module is any Tests) ? "Tests" : name, color: .cyan, style: .bold)",
        "❖"
       )
      }
@@ -220,7 +220,7 @@ extension ModuleContext {
   if indices.count > 1 {
    for index in indices[1...] {
     let key = index.key
-    if let context = cache[key], context.tasks.queue.notEmpty {
+    if let context = cache[key] {
      try await context.callTestResults(index: index, with: state)
     }
    }

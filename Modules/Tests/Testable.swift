@@ -46,7 +46,7 @@ public extension Testable {
        print(
         "\n[ \(label, style: .bold) ]",
         "\("starting", color: .cyan)",
-        "\(name, color: .cyan, style: .bold)",
+        "\((module is any Tests) ? "Tests" : name, color: .cyan, style: .bold)",
         "❖"
        )
       }
