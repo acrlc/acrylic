@@ -50,7 +50,7 @@ public struct AsyncTask
    priority: priority, detached: detached, task: task
   )
  }
- 
+
  public static func detached(
   priority: TaskPriority? = nil,
   _ detached: Bool = true,
@@ -119,7 +119,7 @@ public actor Tasks:
  }
 
  public func invalidate() async {
-  await Tasks.run {
+  await Tasks.run { @Sendable in
    while running.notEmpty {
     running.popLast()?.1.cancel()
    }
@@ -141,7 +141,7 @@ public actor Tasks:
  }
 
  public func cancel() async {
-  await Tasks.run {
+  await Tasks.run { @Sendable in
    while running.notEmpty {
     running.popLast()?.1.cancel()
    }
@@ -150,7 +150,7 @@ public actor Tasks:
    }
   }
  }
- 
+
  public nonisolated func wait() async throws {
   for (_, task) in running {
    try await task.wait()
@@ -171,27 +171,27 @@ public actor Tasks:
    try await task.wait()
   }
  }
-  
+
  @discardableResult
  public nonisolated func next() async throws -> Sendable? {
   try await running.popFirst()?.1.wait()
  }
- 
+
  @discardableResult
  public nonisolated func last() async throws -> Sendable? {
   try await running.popLast()?.1.wait()
  }
- 
+
  @discardableResult
  public nonisolated func nextDetached() async throws -> Sendable? {
   try await detached.popFirst()?.1.wait()
  }
- 
+
  @discardableResult
  public nonisolated func lastDetached() async throws -> Sendable? {
   try await detached.popLast()?.1.wait()
  }
- 
+
  public func callAsFunction() async throws {
   for (key, task) in queue {
    if task.detached {
@@ -241,7 +241,7 @@ extension Tasks: Collection {
  }
 
  public nonisolated var count: Int { queue.count }
- 
+
  public nonisolated var indices: Range<Int> { queue.elements.indices }
  public nonisolated func index(after i: Int) -> Int {
   queue.elements.index(after: i)

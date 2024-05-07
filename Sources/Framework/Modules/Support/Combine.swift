@@ -11,7 +11,7 @@ public extension Module {
 }
 
 public extension CombineModules {
- struct Sink<ID: Hashable, Output>: Function {
+ struct Sink<ID: Hashable, Output: Sendable>: Function, @unchecked Sendable {
   public var id: ID?
   public var priority: TaskPriority?
   public var detached = true
@@ -77,7 +77,7 @@ public extension CombineModules {
    }
   }
 
-  public struct Async: AsyncFunction {
+  public struct Async: AsyncFunction,  @unchecked Sendable {
    public var id: ID?
    public var priority: TaskPriority?
    public var detached = true
@@ -147,4 +147,5 @@ public extension CombineModules {
  }
 }
 
+extension AnyCancellable: @unchecked Sendable {}
 #endif

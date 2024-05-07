@@ -46,6 +46,7 @@ public protocol AsyncFunction: Detachable, Module {
  typealias Priority = TaskPriority
  var priority: Priority? { get set }
  var detached: Bool { get set }
+ @Sendable
  @inlinable
  @discardableResult
  func callAsFunction() async throws -> Output
@@ -151,7 +152,7 @@ public extension MainFunction {
 
 // MARK: - Modules
 public extension Modular {
- struct Perform<ID: Hashable, Output: Sendable>: Function {
+ struct Perform<ID: Hashable, Output: Sendable>: Function, @unchecked Sendable {
   public var id: ID?
   public var priority: TaskPriority?
   public var detached: Bool = false
@@ -201,7 +202,7 @@ public extension Modular {
   }
  }
 
- struct Repeat<ID: Hashable>: Function {
+ struct Repeat<ID: Hashable>: Function, @unchecked Sendable {
   public var id: ID?
   public var priority: TaskPriority?
   public var detached: Bool = false
@@ -253,7 +254,7 @@ public extension Modular {
   }
  }
 
- struct Loop<ID: Hashable>: Function {
+ struct Loop<ID: Hashable>: Function, @unchecked Sendable {
   public var id: ID?
   public var priority: TaskPriority?
   public var detached: Bool = false
@@ -307,7 +308,7 @@ public extension Modular {
 }
 
 public extension Modular.Perform {
- struct Async: AsyncFunction {
+ struct Async: AsyncFunction, @unchecked Sendable {
   public var id: ID?
   public var priority: Priority?
   public var detached: Bool
@@ -386,7 +387,7 @@ public extension Modular.Perform.Async {
 }
 
 public extension Modular.Repeat {
- struct Async: AsyncFunction {
+ struct Async: AsyncFunction, @unchecked Sendable {
   public var id: ID?
   public var priority: TaskPriority?
   public var detached: Bool = false
@@ -441,7 +442,7 @@ public extension Modular.Repeat.Async {
 }
 
 public extension Modular.Loop {
- struct Async: AsyncFunction {
+ struct Async: AsyncFunction, @unchecked Sendable {
   public var id: ID?
   public var priority: TaskPriority?
   public var detached: Bool = false

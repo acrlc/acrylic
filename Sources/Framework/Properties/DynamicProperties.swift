@@ -18,8 +18,7 @@ extension ModuleContext: Combine.ObservableObject {}
 
 @propertyWrapper
 public struct _DynamicContextBindingProperty
-<A, Value: Sendable>: ContextualProperty, DynamicProperty
- where A: StaticModule {
+<A, Value: Sendable>: ContextualProperty where A: StaticModule {
  public var id = A._mangledName.hashValue
 
  @usableFromInline
@@ -92,7 +91,7 @@ public extension ToolbarContent {
 @propertyWrapper
 public struct _StaticModuleAliasProperty
 <A: StaticModule, Value: Sendable>:
- @unchecked Sendable, ContextualProperty, DynamicProperty {
+ @unchecked Sendable, ContextualProperty {
  public var id = A._mangledName.hashValue
  @usableFromInline
  let keyPath: WritableKeyPath<A, Value>
@@ -247,7 +246,7 @@ public extension Module {
 @propertyWrapper
 public struct _ObservedModuleAliasProperty
 <A: ObservableModule, Value: Sendable>:
- @unchecked Sendable, ContextualProperty, DynamicProperty {
+ @unchecked Sendable, ContextualProperty {
  public var id = A._mangledName.hashValue
  public var context: ModuleContext
 

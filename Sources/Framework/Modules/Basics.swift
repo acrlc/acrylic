@@ -1,6 +1,6 @@
 public extension Modular {
  /// Aligns or tags the attributes of every module contained within the group
- struct Group<ID: Hashable, Results: Module>: Module {
+ struct Group<ID: Hashable, Results: Module>: Module, @unchecked Sendable {
   public var id: ID?
   @Modular
   public var results: () -> Results
@@ -32,14 +32,14 @@ public extension Modular {
  }
 
  /// Maps the results of iterating over a sequence as a single group of modules
- struct Map<ID: Hashable, Elements, Result>: Module
+ struct Map<ID: Hashable, Elements, Result>: Module, @unchecked Sendable
   where Elements: Sequence, Result: Module {
   public var id: ID?
   public var elements: Elements
   @Modular
   public var result: (Elements.Element) -> Result
 
-  /// - Note: This automatically converts the map into a group
+  /// - Note: This automatically converts the map into a group with the same id
   public var void: some Module {
    Group(id: id, array: elements.map { result($0) })
   }

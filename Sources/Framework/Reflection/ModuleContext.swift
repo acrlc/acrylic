@@ -9,7 +9,7 @@ open class ModuleContext:
  @_spi(ModuleReflection)
  public typealias Indices = ModuleIndex.Indices
 
- public enum State: Int8, CaseIterable {
+ public enum State: Int8, Sendable, CaseIterable {
   case initial = -1, active, idle, terminal
 
   static func += (_ lhs: inout Self, rhs: RawValue) {

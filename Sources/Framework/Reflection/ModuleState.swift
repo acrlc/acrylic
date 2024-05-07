@@ -173,7 +173,7 @@ public extension Function {
  ) -> Self {
   context.tasks[queue: key] = AsyncTask(
    priority: priority, detached: detached
-  ) {
+  ) { @Sendable in
    try self.callAsFunction()
   }
   return self

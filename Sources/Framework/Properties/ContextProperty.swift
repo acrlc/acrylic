@@ -37,16 +37,15 @@ extension [(label: String, keyPath: AnyKeyPath, property: any DynamicProperty)]:
 extension AnyKeyPath: @unchecked Sendable {}
 
 // MARK: - Context Properties
-public protocol ContextualProperty: Identifiable, DynamicProperty {
- var id: Int { get set }
- var context: ModuleContext { get }
+public protocol ContextualProperty: Identifiable, DynamicProperty, Sendable {
+ nonisolated(unsafe) var id: Int { @Sendable get set }
+ nonisolated(unsafe) var context: ModuleContext { get }
  @inlinable
  mutating func initialize()
  @inlinable
  mutating func initialize(with context: ModuleContext) async
 }
 
-@Reflection
 public extension ContextualProperty {
  @_disfavoredOverload
  mutating func initialize() {}
@@ -102,7 +101,6 @@ ContextProperty<Value: Sendable>: @unchecked Sendable, ContextualProperty {
  public var projectedValue: Self { self }
 }
 
-@Reflection
 extension ContextProperty {
  public mutating func initialize() {
   if let initialValue {

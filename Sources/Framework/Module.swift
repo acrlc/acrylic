@@ -1,7 +1,8 @@
-public protocol Module: Identifiable {
+public protocol Module: Identifiable, Sendable {
+ override var id: ID { @Sendable get }
  associatedtype VoidFunction: Module
  @Modular
- var void: VoidFunction { get async throws }
+ var void: VoidFunction { @Sendable get async throws }
 }
 
 public extension Module {
@@ -197,3 +198,6 @@ public extension Module where ID == EmptyID {
  @_disfavoredOverload
  var id: EmptyID { EmptyID(placeholder: "\(Self.self)") }
 }
+
+extension AnyHashable: @unchecked Sendable {}
+extension AnyHashable?: @unchecked Sendable {}
