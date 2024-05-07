@@ -4,15 +4,10 @@ import Time
 import Shell
 
 public protocol TestError: LocalizedError, CustomStringConvertible {}
+
 /// A testable environment
 public protocol Tests: Testable {
  init()
- /// Performs before a test starts
- mutating func setUp() async throws
- /// Performs when a test is finished
- mutating func cleanUp() async throws
- /// Performs when a test completes without throwing
- mutating func onCompletion() async throws
 }
 
 public extension Tests {
