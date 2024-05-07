@@ -108,7 +108,7 @@ public extension ModuleContext {
  }
 }
 
-// MARK: - Public
+// MARK: - Public Implementation
 public extension ModuleContext {
  /// Cancels all tasks including the subsequent, while removing queued tasks
  ///
@@ -214,7 +214,7 @@ public extension ModuleContext {
    context != nil,
    """
    invalid ID `\(id)` for \(#function), use `subscript(checkedID:)` to \
-   to unwrap, wait until context is loaded, or use an ID that mathes a module \
+   to unwrap, wait until context is loaded, or use an ID that matches a module \
    contained within `void`.
    """
   )
@@ -227,14 +227,13 @@ public extension ModuleContext {
  }
 }
 
+// MARK: - Module Operations
 public extension ModuleContext {
  @inline(__always)
  /// Restarts a subcontext based on a module's `id` property.
  ///
- /// - Parameters:
- ///   - id: The `id` property of the module that needs to be restarted
- ///
- /// - Throws: Any potential error from the targeted module
+ /// - parameter id: The `id` property of the module that needs to be restarted
+ /// - throws: Any potential error returned by the targeted module
  ///
  func restart(_ id: some Hashable) async throws {
   let tasks = self[id].tasks
