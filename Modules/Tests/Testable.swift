@@ -239,7 +239,7 @@ struct TestsError: Error, CustomStringConvertible {
 }
 
 /// A module for testing modules that allows throwing within an async context
-public struct Test<ID: Hashable>: Testable {
+public struct Test<ID: Hashable>: Testable, @unchecked Sendable {
  public var id: ID?
  public var breakOnError: Bool = false
  public var setUpHandler: (() async throws -> ())?
@@ -299,7 +299,8 @@ public extension Test {
 }
 
 /// An assertion test that be combined with a result or called independently
-public struct Assertion<ID: Hashable, A: Sendable, B: Sendable>: AsyncFunction {
+public struct Assertion
+<ID: Hashable, A, B: Sendable>: AsyncFunction, @unchecked Sendable {
  public var id: ID?
  let lhs: () async throws -> A
  let rhs: () async throws -> B
@@ -406,7 +407,7 @@ public struct Assertion<ID: Hashable, A: Sendable, B: Sendable>: AsyncFunction {
   self.operator = `operator`
  }
 
- public struct Error: TestError {
+ public struct Error: TestError, @unchecked Sendable {
   let lhs: A
   let rhs: B
   public var errorDescription: String? {
@@ -474,7 +475,7 @@ public extension Assertion where A == Bool, B == Swift.Void {
 }
 
 // MARK: - Coalescing Assertions
-public extension Function where Output: Equatable {
+public extension Function where Output: Sendable & Equatable {
  static func == (
   lhs: Self, rhs: @escaping @autoclosure () throws -> Output
  ) rethrows -> Assertion<ID, Output, Output> {
@@ -520,7 +521,7 @@ public extension AsyncFunction where Output: Equatable {
  }
 }
 
-public extension Function where Output: Comparable {
+public extension Function where Output: Sendable & Comparable {
  static func < (
   lhs: Self, rhs: @escaping @autoclosure () throws -> Output
  ) rethrows -> Assertion<ID, Output, Output> {
@@ -572,7 +573,7 @@ public extension AsyncFunction where Output: Comparable {
  }
 }
 
-public extension Function where Output: Equatable & Comparable {
+public extension Function where Output: Sendable & Equatable & Comparable {
  static func <= (
   lhs: Self, rhs: @escaping @autoclosure () throws -> Output
  ) rethrows -> Assertion<ID, Output, Output> {
@@ -626,7 +627,7 @@ public extension AsyncFunction where Output: Equatable & Comparable {
 
 /// Executes a void funtion while minimizing compiler optimizations that could
 /// interfere with testing
-public struct Blackhole<ID: Hashable>: AsyncFunction {
+public struct Blackhole<ID: Hashable>: AsyncFunction, @unchecked Sendable {
  public var id: ID?
  @inline(never)
  let perform: () async throws -> ()
@@ -659,7 +660,8 @@ public struct Blackhole<ID: Hashable>: AsyncFunction {
 
 /// Executes a return funtion while minimizing compiler optimizations that could
 /// interfere with testing
-public struct Identity<ID: Hashable, Output: Sendable>: AsyncFunction {
+public struct Identity
+<ID: Hashable, Output: Sendable>: AsyncFunction, @unchecked Sendable {
  public var id: ID?
  @inline(never)
  public let result: @Sendable () async throws -> Output

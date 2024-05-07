@@ -53,7 +53,6 @@ public final class TestState<A: Testable>: StateActor, @unchecked Sendable {
 }
 
 @_spi(ModuleReflection)
-@Reflection
 extension Tasks {
  @usableFromInline
  @discardableResult

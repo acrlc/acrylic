@@ -1,6 +1,7 @@
 @_spi(ModuleReflection) import Acrylic
 @_exported import Acrylic
 @_exported import Time
+import Shell
 
 /// A base protocol for calling modules as tests
 public protocol TestProtocol: Module {
@@ -113,3 +114,6 @@ public extension TestProtocol where Self: AsyncFunction {
   try await callAsFunction()
  }
 }
+
+extension Chalk.Color: @unchecked Sendable {}
+extension Chalk.Style: @unchecked Sendable {}

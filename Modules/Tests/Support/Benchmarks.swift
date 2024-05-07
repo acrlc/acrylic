@@ -3,7 +3,7 @@
 @_exported import Time
 
 /// A module that benchmarks functions
-extension Benchmarks: TestProtocol {
+extension Benchmarks: TestProtocol, @unchecked Sendable {
  public func callAsTest() async throws {
   do {
    let results = try await self()
