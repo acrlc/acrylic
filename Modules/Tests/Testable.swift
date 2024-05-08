@@ -295,7 +295,7 @@ public extension Test {
   _ id: ID,
   breakOnError: Bool = false,
   fileID: String = #fileID,
-    line: Int = #line,
+  line: Int = #line,
   column: Int = #column,
   setUp: (() async throws -> ())? = nil,
   onCompletion: (() async throws -> ())? = nil,
@@ -306,7 +306,6 @@ public extension Test {
   self.breakOnError = breakOnError
   sourceLocation = SourceLocation(
    fileID: fileID,
-   
    line: line,
    column: column
   )
@@ -330,7 +329,6 @@ public extension Test {
   self.breakOnError = breakOnError
   sourceLocation = SourceLocation(
    fileID: fileID,
-   
    line: line,
    column: column
   )
@@ -369,7 +367,7 @@ public struct Assertion
  public init(
   _ id: ID,
   fileID: String = #fileID,
-    line: Int = #line,
+  line: Int = #line,
   column: Int = #column,
   _ lhs: @escaping @autoclosure () throws -> A,
   _ operator: @escaping (A, B) -> Bool = { $0 == $1 },
@@ -378,7 +376,6 @@ public struct Assertion
   self.id = id
   sourceLocation = SourceLocation(
    fileID: fileID,
-   
    line: line,
    column: column
   )
@@ -391,7 +388,7 @@ public struct Assertion
  public init(
   _ id: ID,
   fileID: String = #fileID,
-    line: Int = #line,
+  line: Int = #line,
   column: Int = #column,
   _ lhs: @escaping @autoclosure () throws -> A,
   _ operator: @escaping (A, B) -> Bool,
@@ -400,7 +397,6 @@ public struct Assertion
   self.id = id
   sourceLocation = SourceLocation(
    fileID: fileID,
-   
    line: line,
    column: column
   )
@@ -413,7 +409,7 @@ public struct Assertion
  public init(
   id: ID,
   fileID: String = #fileID,
-    line: Int = #line,
+  line: Int = #line,
   column: Int = #column,
   _ lhs: @escaping () async throws -> A,
   _ operator: @escaping (A, B) -> Bool = { $0 == $1 },
@@ -422,7 +418,6 @@ public struct Assertion
   self.id = id
   sourceLocation = SourceLocation(
    fileID: fileID,
-   
    line: line,
    column: column
   )
@@ -435,7 +430,7 @@ public struct Assertion
  public init(
   id: ID,
   fileID: String = #fileID,
-    line: Int = #line,
+  line: Int = #line,
   column: Int = #column,
   _ lhs: @escaping () async throws -> A,
   _ operator: @escaping (A, B) -> Bool,
@@ -444,7 +439,6 @@ public struct Assertion
   self.id = id
   sourceLocation = SourceLocation(
    fileID: fileID,
-   
    line: line,
    column: column
   )
@@ -456,7 +450,7 @@ public struct Assertion
 
  public init(
   fileID: String = #fileID,
-    line: Int = #line,
+  line: Int = #line,
   column: Int = #column,
   _ lhs: @escaping @autoclosure () throws -> A,
   _ operator: @escaping (A, B) -> Bool = { $0 == $1 },
@@ -464,11 +458,9 @@ public struct Assertion
  ) where ID == EmptyID, A: Equatable, A == B {
   sourceLocation = SourceLocation(
    fileID: fileID,
-   
    line: line,
    column: column
   )
-
   self.lhs = lhs
   self.rhs = rhs
   self.operator = `operator`
@@ -476,7 +468,7 @@ public struct Assertion
 
  public init(
   fileID: String = #fileID,
-    line: Int = #line,
+  line: Int = #line,
   column: Int = #column,
   _ lhs: @escaping @autoclosure () throws -> A,
   _ operator: @escaping (A, B) -> Bool,
@@ -484,11 +476,9 @@ public struct Assertion
  ) where ID == EmptyID {
   sourceLocation = SourceLocation(
    fileID: fileID,
-   
    line: line,
    column: column
   )
-
   self.lhs = lhs
   self.rhs = rhs
   self.operator = `operator`
@@ -496,7 +486,7 @@ public struct Assertion
 
  public init(
   fileID: String = #fileID,
-    line: Int = #line,
+  line: Int = #line,
   column: Int = #column,
   _ lhs: @escaping () async throws -> A,
   _ operator: @escaping (A, B) -> Bool = { $0 == $1 },
@@ -504,11 +494,9 @@ public struct Assertion
  ) where ID == EmptyID, A: Equatable, A == B {
   sourceLocation = SourceLocation(
    fileID: fileID,
-   
    line: line,
    column: column
   )
-
   self.lhs = lhs
   self.rhs = rhs
   self.operator = `operator`
@@ -516,7 +504,7 @@ public struct Assertion
 
  public init(
   fileID: String = #fileID,
-    line: Int = #line,
+  line: Int = #line,
   column: Int = #column,
   _ lhs: @escaping () async throws -> A,
   _ operator: @escaping (A, B) -> Bool,
@@ -524,11 +512,9 @@ public struct Assertion
  ) where ID == EmptyID {
   sourceLocation = SourceLocation(
    fileID: fileID,
-   
    line: line,
    column: column
   )
-
   self.lhs = lhs
   self.rhs = rhs
   self.operator = `operator`
@@ -570,18 +556,16 @@ public extension Assertion where A == Bool, B == Swift.Void {
  init(
   _ id: ID,
   fileID: String = #fileID,
-    line: Int = #line,
+  line: Int = #line,
   column: Int = #column,
   condition: @escaping () async throws -> Bool
  ) {
   self.id = id
   sourceLocation = SourceLocation(
    fileID: fileID,
-   
    line: line,
    column: column
   )
-
   lhs = condition
   rhs = {}
   self.operator = { condition, _ in condition }
@@ -590,18 +574,16 @@ public extension Assertion where A == Bool, B == Swift.Void {
  init(
   _ id: ID,
   fileID: String = #fileID,
-    line: Int = #line,
+  line: Int = #line,
   column: Int = #column,
   _ condition: @escaping @autoclosure () throws -> Bool
  ) {
   self.id = id
   sourceLocation = SourceLocation(
    fileID: fileID,
-   
    line: line,
    column: column
   )
-
   lhs = condition
   rhs = {}
   self.operator = { condition, _ in condition }
@@ -609,18 +591,16 @@ public extension Assertion where A == Bool, B == Swift.Void {
 
  init(
   fileID: String = #fileID,
-    line: Int = #line,
+  line: Int = #line,
   column: Int = #column,
   condition: @escaping () async throws -> Bool
  )
   where ID == EmptyID {
   sourceLocation = SourceLocation(
    fileID: fileID,
-   
    line: line,
    column: column
   )
-
   lhs = condition
   rhs = {}
   self.operator = { condition, _ in condition }
@@ -628,14 +608,13 @@ public extension Assertion where A == Bool, B == Swift.Void {
 
  init(
   fileID: String = #fileID,
-    line: Int = #line,
+  line: Int = #line,
   column: Int = #column,
   _ condition: @escaping @autoclosure () throws -> Bool
  )
   where ID == EmptyID {
   sourceLocation = SourceLocation(
    fileID: fileID,
-   
    line: line,
    column: column
   )
@@ -1071,14 +1050,14 @@ public struct Blackhole<ID: Hashable>: TestProtocol, @unchecked Sendable {
  public init(
   _ id: ID,
   fileID: String = #fileID,
-    line: Int = #line,
+  line: Int = #line,
   column: Int = #column,
   _ perform: @escaping () async throws -> some Any
  ) {
   self.id = id
   sourceLocation = SourceLocation(
    fileID: fileID,
-   
+
    line: line,
    column: column
   )
@@ -1088,13 +1067,13 @@ public struct Blackhole<ID: Hashable>: TestProtocol, @unchecked Sendable {
 
  public init(
   fileID: String = #fileID,
-    line: Int = #line,
+  line: Int = #line,
   column: Int = #column,
   _ perform: @escaping () async throws -> some Any
  ) where ID == EmptyID {
   sourceLocation = SourceLocation(
    fileID: fileID,
-   
+
    line: line,
    column: column
   )
@@ -1105,14 +1084,14 @@ public struct Blackhole<ID: Hashable>: TestProtocol, @unchecked Sendable {
  public init(
   _ id: ID,
   fileID: String = #fileID,
-    line: Int = #line,
+  line: Int = #line,
   column: Int = #column,
   _ perform: @escaping @autoclosure () throws -> some Any
  ) {
   self.id = id
   sourceLocation = SourceLocation(
    fileID: fileID,
-   
+
    line: line,
    column: column
   )
@@ -1122,13 +1101,13 @@ public struct Blackhole<ID: Hashable>: TestProtocol, @unchecked Sendable {
 
  public init(
   fileID: String = #fileID,
-    line: Int = #line,
+  line: Int = #line,
   column: Int = #column,
   _ perform: @escaping @autoclosure () throws -> some Any
  ) where ID == EmptyID {
   sourceLocation = SourceLocation(
    fileID: fileID,
-   
+
    line: line,
    column: column
   )
@@ -1151,7 +1130,7 @@ public struct Identity
  public init(
   _ id: ID,
   fileID: String = #fileID,
-    line: Int = #line,
+  line: Int = #line,
   column: Int = #column,
 
   _ result: @Sendable @escaping () async throws -> Output
@@ -1159,7 +1138,7 @@ public struct Identity
   self.id = id
   sourceLocation = SourceLocation(
    fileID: fileID,
-   
+
    line: line,
    column: column
   )
@@ -1169,14 +1148,14 @@ public struct Identity
 
  public init(
   fileID: String = #fileID,
-    line: Int = #line,
+  line: Int = #line,
   column: Int = #column,
   _ result: @Sendable @escaping () async throws -> Output
  )
   where ID == EmptyID {
   sourceLocation = SourceLocation(
    fileID: fileID,
-   
+
    line: line,
    column: column
   )
@@ -1187,7 +1166,7 @@ public struct Identity
  public init(
   _ id: ID,
   fileID: String = #fileID,
-    line: Int = #line,
+  line: Int = #line,
   column: Int = #column,
 
   _ result: @Sendable @escaping @autoclosure () throws -> Output
@@ -1195,7 +1174,7 @@ public struct Identity
   self.id = id
   sourceLocation = SourceLocation(
    fileID: fileID,
-   
+
    line: line,
    column: column
   )
@@ -1205,14 +1184,14 @@ public struct Identity
 
  public init(
   fileID: String = #fileID,
-    line: Int = #line,
+  line: Int = #line,
   column: Int = #column,
   _ result: @Sendable @escaping @autoclosure () throws -> Output
  )
   where ID == EmptyID {
   sourceLocation = SourceLocation(
    fileID: fileID,
-   
+
    line: line,
    column: column
   )

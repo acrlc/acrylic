@@ -42,7 +42,7 @@ public extension ModularFunctions {
   init(_ items: Any..., separator: String = " ", terminator: String = "\n") {
    self.items = items.map {
     ($0 as? any CustomDebugStringConvertible)?.debugDescription ??
-    String(describing: $0).debugDescription
+     String(describing: $0).debugDescription
    }
    self.separator = separator
    self.terminator = terminator

@@ -54,7 +54,6 @@ extension Benchmarks: TestProtocol, @unchecked Sendable {
    line: line,
    column: column
   )
-
   setup = setUp
   complete = onCompletion
   cleanup = cleanUp
@@ -76,7 +75,6 @@ extension Benchmarks: TestProtocol, @unchecked Sendable {
    line: line,
    column: column
   )
-
   setup = setUp
   complete = onCompletion
   cleanup = cleanUp
