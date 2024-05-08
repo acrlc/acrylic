@@ -1,6 +1,7 @@
 @_spi(ModuleReflection) import Acrylic
 @_exported import Benchmarks
 @_exported import Time
+import Utilities
 
 /// A module that benchmarks functions
 extension Benchmarks: TestProtocol, @unchecked Sendable {
@@ -13,16 +14,16 @@ extension Benchmarks: TestProtocol, @unchecked Sendable {
     let size = result.size
     let single = size == 1
     let time = single ? result.times[0] : result.average
-    
+
     print(
      "[ " + title.applying(color: .cyan, style: .bold) + " ]",
      "\("called \(size) \(single ? "time" : "times")", style: .boldDim)",
      "\(single ? "in" : "average", color: .cyan, style: .bold)" + .space +
-     "\(time.description + .space, style: .boldDim)"
+      "\(time.description + .space, style: .boldDim)"
     )
-    
+
     let results = result.results._validResults
-    
+
     if results.notEmpty {
      print(
       String.space,
@@ -35,9 +36,12 @@ extension Benchmarks: TestProtocol, @unchecked Sendable {
    throw error
   }
  }
- 
+
  init(
   id: ID,
+  fileID: String = #fileID,
+  line: Int = #line,
+  column: Int = #column,
   setUp: (() async throws -> ())? = nil,
   onCompletion: (() async throws -> ())? = nil,
   cleanUp: (() async throws -> ())? = nil,
@@ -45,25 +49,40 @@ extension Benchmarks: TestProtocol, @unchecked Sendable {
  ) {
   self.init()
   self.id = id
+  sourceLocation = SourceLocation(
+   fileID: fileID,
+   line: line,
+   column: column
+  )
+
   setup = setUp
   complete = onCompletion
   cleanup = cleanUp
   items = benchmarks
  }
- 
+
  init(
+  fileID: String = #fileID,
+  line: Int = #line,
+  column: Int = #column,
   setUp: (() async throws -> ())? = nil,
   onCompletion: (() async throws -> ())? = nil,
   cleanUp: (() async throws -> ())? = nil,
   benchmarks: @escaping () -> [any BenchmarkProtocol]
  ) where ID == EmptyID {
   self.init()
+  sourceLocation = SourceLocation(
+   fileID: fileID,
+   line: line,
+   column: column
+  )
+
   setup = setUp
   complete = onCompletion
   cleanup = cleanUp
   items = benchmarks
  }
- 
+
  public typealias Modules = BenchmarkModules<ID>
 }
 
@@ -76,6 +95,9 @@ public struct BenchmarkModules<ID: Hashable>: TestProtocol {
   warmup: Size = .zero,
   iterations: Size = 10,
   timeout: Double = 5.0,
+  fileID: String = #fileID,
+  line: Int = #line,
+  column: Int = #column,
   setUp: (() async throws -> ())? = nil,
   onCompletion: (() async throws -> ())? = nil,
   cleanUp: (() async throws -> ())? = nil,
@@ -83,6 +105,9 @@ public struct BenchmarkModules<ID: Hashable>: TestProtocol {
  ) {
   benchmarks = .init(
    id: id,
+   fileID: fileID,
+   line: line,
+   column: column,
    setUp: setUp,
    onCompletion: onCompletion,
    cleanUp: cleanUp,
@@ -110,17 +135,23 @@ public struct BenchmarkModules<ID: Hashable>: TestProtocol {
    }
   )
  }
- 
+
  public init(
   warmup: Size = .zero,
   iterations: Size = 10,
   timeout: Double = 5.0,
+  fileID: String = #fileID,
+  line: Int = #line,
+  column: Int = #column,
   setUp: (() async throws -> ())? = nil,
   onCompletion: (() async throws -> ())? = nil,
   cleanUp: (() async throws -> ())? = nil,
   @Modular modules: @escaping () -> [any Module]
  ) where ID == EmptyID {
   benchmarks = Benchmarks(
+   fileID: fileID,
+   line: line,
+   column: column,
    setUp: setUp,
    onCompletion: onCompletion,
    cleanUp: cleanUp,
@@ -148,7 +179,7 @@ public struct BenchmarkModules<ID: Hashable>: TestProtocol {
    }
   )
  }
- 
+
  public func callAsTest() async throws {
   try await benchmarks.callAsTest()
  }

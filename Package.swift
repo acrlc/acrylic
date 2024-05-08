@@ -51,7 +51,8 @@ let package = Package(
     "Time",
     "Shell",
     "Acrylic",
-    "Benchmarks"
+    "Benchmarks",
+    .product(name: "Utilities", package: "core")
    ],
    path: "Modules/Tests"
   ),

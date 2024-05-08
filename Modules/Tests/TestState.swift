@@ -130,8 +130,8 @@ extension Tasks {
 
    endTime = timer.elapsed.description
 
-   try await self.waitForDetached()
-   
+   try await waitForDetached()
+
    let key = index.key
    var result = results[key].unsafelyUnwrapped
    var valid = true
@@ -186,7 +186,9 @@ extension Tasks {
    endTime = timer.elapsed.description
 
    let baseTest = state.baseTest
-   let message = baseTest.errorMessage(with: label ?? name, for: error)
+   let message = baseTest.errorMessage(
+    with: label ?? name, for: error, at: isTest ? test.sourceLocation : nil
+   )
 
    print(String.newline + message)
    print(endMessage + .newline)
@@ -197,7 +199,7 @@ extension Tasks {
 
    if
     (isTest && test.testMode == .break) || baseTest.testMode == .break {
-    throw TestsError(message: message)
+    throw TestsError(message: message, sourceLocation: test.sourceLocation)
    }
   }
   return nil
@@ -256,7 +258,7 @@ public extension Reflection {
 
    state = initialState
    initialState.bind([module])
-   
+
    let index = initialState.context.index
 
    index.element.prepareContext(from: index, actor: initialState)

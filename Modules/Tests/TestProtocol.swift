@@ -1,6 +1,7 @@
 @_spi(ModuleReflection) import Acrylic
 @_exported import Acrylic
 @_exported import Time
+import Utilities
 import Shell
 
 /// A base protocol for calling modules as tests
@@ -12,6 +13,7 @@ public protocol TestProtocol: Module {
  var endMessage: String { get }
  var testName: String? { get }
  var silent: Bool { get set }
+ var sourceLocation: SourceLocation? { get }
  /// Performs before a test starts
  mutating func setUp() async throws
  /// Performs when a test is finished
@@ -24,6 +26,8 @@ public protocol TestProtocol: Module {
 }
 
 public extension TestProtocol {
+ @_disfavoredOverload
+ var sourceLocation: SourceLocation? { nil }
  @_disfavoredOverload
  func setUp() {}
  @_disfavoredOverload

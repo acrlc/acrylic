@@ -1,7 +1,7 @@
 @_spi(ModuleReflection) import Acrylic
 import protocol Foundation.LocalizedError
-import Time
 import Shell
+import Time
 
 public protocol TestError: LocalizedError, CustomStringConvertible {}
 
@@ -21,12 +21,12 @@ public extension Tests {
  var testName: String? {
   var typeName = Self.typeConstructorName
   let suffixes = ["Tests", "Test"]
-  
+
   for suffix in suffixes where typeName.hasSuffix(suffix) {
    guard typeName != suffix else { return suffix }
-   
+
    let startIndex = typeName.index(typeName.endIndex, offsetBy: -suffix.count)
-   
+
    typeName.removeSubrange(startIndex...)
    typeName.append(" \(suffix)")
    break
@@ -34,7 +34,6 @@ public extension Tests {
   return typeName
  }
 }
-
 
 public extension Testable {
  mutating func callAsTestFromContext(id: AnyHashable? = nil) async throws {
@@ -72,7 +71,9 @@ public extension Testable {
    // ultimately, they entire void should be captured, but it's currently
    // required
    // to update modules
-   print(errorMessage(with: resolvedName, for: error))
+   print(
+    errorMessage(with: resolvedName, for: error, at: sourceLocation)
+   )
    end(error: true)
    throw error
   }
@@ -94,7 +95,13 @@ public extension Testable {
   } catch {
    defer {
     if !started {
-     print(self.errorMessage(with: self.resolvedName, for: error))
+     print(
+      self.errorMessage(
+       with: self.resolvedName,
+       for: error,
+       at: self.sourceLocation
+      )
+     )
     }
     end(error: true)
    }
@@ -102,9 +109,9 @@ public extension Testable {
    throw error
   }
  }
- 
- func callAsTestForObjectFromContext(id: AnyHashable? = nil) async throws 
- where Self: AnyObject {
+
+ func callAsTestForObjectFromContext(id: AnyHashable? = nil) async throws
+  where Self: AnyObject {
   var reference = self
   try await reference.callAsTestFromContext(id: id)
  }
