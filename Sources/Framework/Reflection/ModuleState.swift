@@ -28,6 +28,7 @@ public actor ModuleState: @unchecked Sendable, StateActor {
 @_spi(ModuleReflection)
 @Reflection
 public extension StateActor {
+ @_disfavoredOverload
  func update() async throws -> (any Module)? {
   await context.invalidate()
   context.invalidateSubrange()
@@ -115,7 +116,7 @@ public extension StateActor {
 
    state = initialState
    initialState.bind([module])
-   
+
    let index = initialState.context.index
 
    index.element.prepareContext(from: index, actor: initialState)
@@ -354,12 +355,19 @@ public extension Module {
     let character = name[offset]
     if character == "<" {
      if let bracketed = name[offset...].break(from: "<", to: ">") {
-      substrings.append(name[startIndex ..< offset])
-
       let endIndex = bracketed.endIndex
+
       guard endIndex < name.endIndex else {
-       break
+       let substring = name[name.startIndex ..< bracketed.startIndex]
+
+       if substring.count(for: ".") > 0 {
+        return filtered(substring.split(separator: "."))
+       } else {
+        return String(substring)
+       }
       }
+
+      substrings.append(name[startIndex ..< offset])
       startIndex = name.index(after: endIndex)
       offset = name.index(after: endIndex)
      } else {
