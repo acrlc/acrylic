@@ -340,11 +340,18 @@ public extension Module {
 
   switch bracketCount {
   case 0:
-   return filtered(name.split(separator: "."))
+   if name.contains(".") {
+    return filtered(name.split(separator: "."))
+   } else {
+    return String(name)
+   }
   case 1:
-   return String(
-    filtered(name.prefix(while: { $0 != "<" }).split(separator: "."))
-   )
+   let prefix = name.prefix(while: { $0 != "<" })
+   if prefix.contains(".") {
+    return filtered(prefix.split(separator: "."))
+   } else {
+    return String(prefix)
+   }
   default:
 
    var startIndex = name.startIndex
@@ -360,7 +367,7 @@ public extension Module {
       guard endIndex < name.endIndex else {
        let substring = name[name.startIndex ..< bracketed.startIndex]
 
-       if substring.count(for: ".") > 0 {
+       if substring.contains(".") {
         return filtered(substring.split(separator: "."))
        } else {
         return String(substring)
