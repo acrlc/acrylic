@@ -99,7 +99,7 @@ public struct BenchmarkModules<ID: Hashable>: TestProtocol {
   setUp: (() async throws -> ())? = nil,
   onCompletion: (() async throws -> ())? = nil,
   cleanUp: (() async throws -> ())? = nil,
-  @Modular modules: @escaping () -> [any Module]
+  @Modular modules: @escaping () -> Modules
  ) {
   benchmarks = .init(
    id: id,
@@ -110,8 +110,7 @@ public struct BenchmarkModules<ID: Hashable>: TestProtocol {
    onCompletion: onCompletion,
    cleanUp: cleanUp,
    benchmarks: {
-    let modules = modules()
-    return modules.map { module -> any BenchmarkProtocol in
+    return modules().map { module -> any BenchmarkProtocol in
      let id = module.idString
      if let task = module as? any AsyncFunction {
       return Measure.Async(
@@ -144,7 +143,7 @@ public struct BenchmarkModules<ID: Hashable>: TestProtocol {
   setUp: (() async throws -> ())? = nil,
   onCompletion: (() async throws -> ())? = nil,
   cleanUp: (() async throws -> ())? = nil,
-  @Modular modules: @escaping () -> [any Module]
+  @Modular modules: @escaping () -> Modules
  ) where ID == EmptyID {
   benchmarks = Benchmarks(
    fileID: fileID,
@@ -154,8 +153,7 @@ public struct BenchmarkModules<ID: Hashable>: TestProtocol {
    onCompletion: onCompletion,
    cleanUp: cleanUp,
    benchmarks: {
-    let modules = modules()
-    return modules.map { module -> any BenchmarkProtocol in
+    return modules().map { module -> any BenchmarkProtocol in
      let id = module.idString
      if let task = module as? any AsyncFunction {
       return Measure.Async(
