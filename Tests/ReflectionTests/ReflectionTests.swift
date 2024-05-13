@@ -6,20 +6,12 @@ final class ReflectionTests: XCTestCase {
  func test() async throws {
   let state = try await ModuleState.initialize(with: Graph())
   let context = state.context
-//  let first = context.indices[0]
-//  try first.forward { index in
-//   let context = try XCTUnwrap(context.cache[index.key])
-//   let index = context.index
-//   //XCTAssert(first == index)
-//  }
-
-  print(context.indices.map(\.description))
-
-//  var graph = Graph()
-//  try await graph.mutatingCallWithContext()
-
-  await context.cancel()
   try await context.callAsFunction()
+ }
+ 
+ func testWithContext() async throws {
+  var graph = Graph()
+  try await graph.mutatingCallWithContext()
  }
 }
 

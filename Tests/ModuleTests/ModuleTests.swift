@@ -26,7 +26,7 @@ final class ModuleTests: XCTestCase {
 }
 
 // MARK: Test Structures
-// A module that recieves a hander and returns recurrent results
+// A module that recieves a handler and returns recurrent results
 protocol Emmiter: Function {
  associatedtype Input: Sendable
  associatedtype Result: Sendable
