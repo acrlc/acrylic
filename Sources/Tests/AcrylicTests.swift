@@ -14,7 +14,7 @@ struct AcrylicTests: TestsCommand {
  @Option
  var pressure: Size = 5
  @Option
- var iterations: Int = 1
+ var iterations: Size = 1
 
  @Context
  var breakOnError = true
@@ -23,14 +23,16 @@ struct AcrylicTests: TestsCommand {
  @Context
  var count: Int = .zero
  @Context
+ var optionalCount: Int?
+ @Context
  var concurrentCount: Int = .zero
 
  let start: Tick = .now
 
  mutating func setUp() {
-  notify("Startup time is", Tick.now.elapsedTime(since: start))
+  notify("Startup time is", start.duration(to: .now))
 
-  if pressure.rawValue > 13 {
+  if pressure > 13 {
    print()
    notify(
     """
@@ -39,20 +41,21 @@ struct AcrylicTests: TestsCommand {
     """.applying(style: .bold), with: .warning
    )
    pressure = 13
-  } else if pressure.rawValue < 1 {
+  } else if pressure < 1 {
    print()
    notify(
     """
     \nSetting test pressure to minimum value of 1\n
-    """.applying(style: .bold), with: .warning
+    """
+    .applying(style: .bold), with: .warning
    )
    pressure = 1
   }
  }
 
  var tests: some Testable {
-  for _ in 0 ..< iterations {
-   Benchmarks("Normal Benchmarks") {
+  for _ in iterations {
+   Benchmarks("Normal") {
     // note: not sure if these warmups do anything at all
     // plus, time is linear and many examples are recursive
     Measure("Sleep 111µs", warmup: 2, iterations: pressure * 11) {
@@ -60,16 +63,16 @@ struct AcrylicTests: TestsCommand {
     }
    }
    Benchmark.Modules(
-    "Module Benchmarks", warmup: 2, iterations: pressure * 11
+    "Module", warmup: 2, iterations: pressure * 11
    ) {
     Perform("Sleep 111µs") { usleep(111) }
    }
 
-   let propertiesBenchmarkSize: Size = pressure * 111
-
+   let propertiesBenchmarkSize: Size = pressure * 1111
+   let expectedCount = Int(propertiesBenchmarkSize + 2)
    /// Measures the speed of reads and writes using `Context` properties
    Benchmarks(
-    "Context Property Benchmarks",
+    "Context Property",
     onCompletion: {
      notify("Current count is", count, with: .info)
     }
@@ -87,16 +90,38 @@ struct AcrylicTests: TestsCommand {
     )
    }
 
+   Identity("Expected Count", count) == expectedCount
+   Identity("Property is nil", optionalCount) == nil
+
    Benchmarks(
-    "Concurrent Property Benchmarks",
+    "Optional Property",
+    setUp: { optionalCount = .zero },
+    onCompletion: {
+     notify(
+      "Optional count is", optionalCount?.description ?? "nil", with: .info
+     )
+    }
+   ) {
+    Measure(
+     "Write += 1", warmup: 2, iterations: propertiesBenchmarkSize,
+     perform: { blackHole(optionalCount! += 1) }
+    )
+   }
+
+   Identity("Optional is not nil", optionalCount) != nil
+   Identity(optionalCount!) == expectedCount
+
+   Benchmarks(
+    "Concurrent Property",
     onCompletion: {
      notify("Concurrent count is", concurrentCount, with: .info)
     }
    ) {
-    let concurrentIterations = 0 ..< count
+    let concurrentIterations = Size(count)
 
     Measure.Async(
      "Concurrent Read",
+     warmup: 2,
      iterations: pressure,
      perform: {
       await withTaskGroup(of: Void.self) { group in
@@ -110,11 +135,12 @@ struct AcrylicTests: TestsCommand {
 
     Measure.Async(
      "Concurrent Write",
+     warmup: 2,
      iterations: pressure,
      perform: {
       await withTaskGroup(of: Void.self) { group in
        for _ in concurrentIterations {
-        group.addTask { blackHole(concurrentCount += 1) }
+        group.addTask { concurrentCount += 1 }
        }
        await group.waitForAll()
       }
@@ -123,7 +149,7 @@ struct AcrylicTests: TestsCommand {
    }
 
    Test("Operational") {
-    let limit = min(13, pressure.rawValue)
+    let limit = Int(min(13, pressure))
     TestTasks()
     TestMapAsyncDetachedTasks(
      count: $asyncMapCount,
@@ -188,16 +214,6 @@ struct AcrylicTestsApp: App {
 extension Size: LosslessStringConvertible {
  public init?(_ description: String) {
   self.init(stringValue: description)
- }
-}
-
-public extension Size {
- static func * (lhs: Self, rhs: Self) -> Self {
-  Self(rawValue: lhs.rawValue * rhs.rawValue)
- }
-
- static func / (lhs: Self, rhs: Self) -> Self {
-  Self(rawValue: lhs.rawValue / rhs.rawValue)
  }
 }
 

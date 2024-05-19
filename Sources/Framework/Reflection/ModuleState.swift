@@ -153,8 +153,10 @@ public extension StateActor {
  ) -> ModuleContext? {
   if index.isStart {
    assert(context.actor != nil, "an actor must exist on the current context")
+   index.element.assign(to: context)
    return nil
-  } else if let context = context.cache[key] {
+  } else if let previousContext = context.cache[key] {
+   index.element.assign(to: previousContext)
    return context
   } else {
    let newContext = index.element.newContext(from: index, actor: self)
@@ -213,8 +215,8 @@ public extension Module {
  }
 
  func newContext(
-  from index: ModuleIndex,
-  actor: some StateActor
+  from index: consuming ModuleIndex,
+  actor: consuming some StateActor
  ) -> ModuleContext {
   var properties = DynamicProperties()
 
@@ -222,7 +224,7 @@ public extension Module {
    let label = String(cString: char)
    if
     label.hasPrefix("_"),
-    let property = self[keyPath: keyPath] as? any ContextualProperty {
+    let property = self[keyPath: keyPath] as? any DynamicProperty {
     properties.append((label, keyPath, property))
    }
    return true
@@ -236,7 +238,7 @@ public extension Module {
 
  consuming func prepareContext(
   from index: consuming ModuleIndex,
-  actor: some StateActor
+  actor: consuming some StateActor
  ) {
   let context = actor.context
   var properties = DynamicProperties()
@@ -245,7 +247,7 @@ public extension Module {
    let label = String(cString: char)
    if
     label.hasPrefix("_"),
-    let property = self[keyPath: keyPath] as? any ContextualProperty {
+    let property = self[keyPath: keyPath] as? any DynamicProperty {
     properties.append((label, keyPath, property))
    }
    return true
@@ -266,11 +268,29 @@ public extension ContextualProperty {
   keyPath: AnyKeyPath
  ) {
   var copy = self
-  if self.context == .unknown {
-   copy.initialize(with: context)
-  } else {
-   copy.initialize()
+  
+  if copy.context == .unknown {
+   copy.context = context
   }
+  
+  copy.update()
+  
+  let writableKeyPath = keyPath as! WritableKeyPath<Root, Self>
+  value[keyPath: writableKeyPath] = copy
+ }
+}
+
+@_spi(ModuleReflection)
+@Reflection
+public extension DynamicProperty {
+ func set<Root>(
+  on value: inout Root,
+  with context: ModuleContext,
+  keyPath: AnyKeyPath
+ ) {
+  var copy = self
+  copy.update()
+  
   let writableKeyPath = keyPath as! WritableKeyPath<Root, Self>
   value[keyPath: writableKeyPath] = copy
  }
@@ -280,10 +300,16 @@ public extension ContextualProperty {
 @Reflection
 public extension Module {
  mutating func assign(to context: ModuleContext) {
+  defer { context.properties = nil }
+  
   if let properties = context.properties {
    for (_, keyPath, property) in properties {
-    let property = property as! any ContextualProperty
-    property.set(on: &self, with: context, keyPath: keyPath)
+    if let property = property as? any ContextualProperty {
+     property.set(on: &self, with: context, keyPath: keyPath)
+    } 
+    else {
+     property.set(on: &self, with: context, keyPath: keyPath)
+    }
    }
   }
  }

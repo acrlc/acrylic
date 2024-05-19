@@ -43,7 +43,8 @@ struct TestAsyncContext: Testable {
 
  var tests: some Testable {
   get async throws {
-   let state = try await ModuleState.initialize(with: Self())
+   let state =
+    try await ModuleState.initialize(with: Self())
    let context = state.context
    let index = context.index
    let value = try (index.element as? Self).throwing()
@@ -54,7 +55,7 @@ struct TestAsyncContext: Testable {
     Task.detached {
      try await context.callAsFunction()
     }
-    
+
     await context.cancel()
     value.should = true
    }
@@ -97,6 +98,7 @@ struct TestAsyncContext: Testable {
 
    Assert("Benchmark Preparation") {
     value.should = false
+    value.throwError = false
     value.count = 1
 
     try await context.update(with: .active)
@@ -116,27 +118,21 @@ struct TestAsyncContext: Testable {
    ///
    Benchmarks("ModuleContext Operations") {
     Measure.Async(
-     "Call Idle Context", warmup: 2, iterations: pressure * 333,
+     "Update Active Context", warmup: 3, iterations: pressure,
+     perform: {
+      try await context.update(with: .active)
+     }
+    )
+
+    Measure.Async(
+     "Call Idle Context", warmup: 3, iterations: pressure,
      perform: {
       try await context.callAsFunction(with: .idle)
      }
     )
 
     Measure.Async(
-     "Update Active Context", warmup: 2, iterations: pressure * 333,
-     perform: {
-      do {
-       try await context.update(with: .active)
-      } catch where error is CancellationError {
-       return
-      } catch {
-       throw error
-      }
-     }
-    )
-    
-    Measure.Async(
-     "Cancel & Call Context", warmup: 2, iterations: pressure * 333,
+     "Cancel & Call Context", warmup: 3, iterations: pressure,
      perform: {
       await context.cancel()
       try? await context.callTasks()

@@ -7,7 +7,7 @@ public protocol ContextModule: Module {
 public extension ContextModule {
  static var state: ModuleState {
   Reflection.cacheIfNeeded(
-   id: _mangledName, module: Self(), stateType: ModuleState.self
+   id: _mangledName, module: { Self() }, stateType: ModuleState.self
   )
  }
 
@@ -196,6 +196,50 @@ public extension ContextModule {
   defer { self.callContext(with: state) }
   return try await action(Self.context)
  }
+
+#if canImport(Combine) && canImport(SwiftUI)
+ @MainActor
+ @discardableResult
+ func state<A>(
+  action: @MainActor @escaping (inout Self) throws -> A
+ ) async rethrows -> A {
+  let context = await Self.context
+  let index = context.index
+  var module: Self {
+   get { index.element as! Self }
+   set { index.element = newValue }
+  }
+  defer { context.objectWillChange.send() }
+  return try action(&module)
+ }
+ 
+ @discardableResult
+ mutating func stateWithContext<A>(
+  action: @Reflection @escaping (inout Self) throws -> A
+ ) rethrows -> A {
+  let context = Self.context
+  defer {
+   context.objectWillChange.send()
+   Task {
+    context.cache = .empty
+    try await context.actor.update()
+    context.state = .active
+    defer { context.state = .idle }
+    try await context.callTasks()
+   }
+  }
+  return try action(&self)
+ }
+
+ @discardableResult
+ func state<A>(
+  action: @Reflection @escaping () throws -> A
+ ) rethrows -> A {
+  let context = Self.context
+  defer { context.objectWillChange.send() }
+  return try action()
+ }
+ #endif
 }
 
 #if canImport(Combine) && canImport(SwiftUI)

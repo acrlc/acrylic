@@ -9,11 +9,13 @@ open class ModuleContext:
  @_spi(ModuleReflection)
  public typealias Indices = ModuleIndex.Indices
 
- public enum State: Int8, Sendable, CaseIterable {
-  case initial = -1, active, idle, terminal
-
-  static func += (_ lhs: inout Self, rhs: RawValue) {
-   lhs = Self(rawValue: lhs.rawValue + rhs) ?? .active
+ public enum State: UInt8, @unchecked Sendable, Comparable {
+  case active, idle, terminal, initial
+  
+  public static func < (
+   lhs: ModuleContext.State, rhs: ModuleContext.State
+  ) -> Bool {
+   lhs.rawValue < rhs.rawValue
   }
  }
 
@@ -33,7 +35,7 @@ open class ModuleContext:
  @_spi(ModuleReflection)
  public var indices: Indices = .empty
  @_spi(ModuleReflection)
- public var values = [Int: Any]()
+ public var values = ReadWriteLockedValue<[Int: Any]>(.empty)
 
  /// - Note: Results feature not implemented but may return in some form
  ///
@@ -86,7 +88,7 @@ public extension ModuleContext {
   }
  }
 
- /// Cancels all tasks including the subsequent, while removing queued tasks
+ /// Cancel all tasks including the subsequent, while removing queued tasks
  ///
  func invalidate() {
   tasks.invalidate()
@@ -97,7 +99,7 @@ public extension ModuleContext {
 
  nonisolated var isCancelled: Bool { tasks.isCancelled }
 
- /// Cancels all tasks including the subsequent, without removing queued tasks
+ /// Cancel all tasks including the subsequent, without removing queued tasks
  ///
  nonisolated func cancel() {
   tasks.cancel()
@@ -110,7 +112,7 @@ public extension ModuleContext {
 
 // MARK: - Public Implementation
 public extension ModuleContext {
- /// Cancels all tasks including the subsequent, while removing queued tasks
+ /// Cancel all tasks including the subsequent, while removing queued tasks
  ///
  func invalidate() async {
   await tasks.invalidate()
@@ -119,7 +121,7 @@ public extension ModuleContext {
   }
  }
 
- /// Cancels all tasks including the subsequent, without removing queued tasks
+ /// Cancel all tasks including the subsequent, without removing queued tasks
  ///
  func cancel() async {
   await tasks.cancel()
@@ -171,14 +173,14 @@ public extension ModuleContext {
 
  func update() async throws {
   switch state {
-  case .idle:
-   state = .terminal
-   defer { state = .idle }
-   await cancel()
   case .active:
    state = .terminal
    defer { state = .idle }
    try await actor.update()
+  case .idle:
+   state = .terminal
+   defer { state = .idle }
+   await cancel()
   case .terminal:
    throw CancellationError()
   case .initial: break
@@ -230,7 +232,7 @@ public extension ModuleContext {
 // MARK: - Module Operations
 public extension ModuleContext {
  @inline(__always)
- /// Restarts a subcontext based on a module's `id` property.
+ /// Restart a subtask based on a module's `id` property.
  ///
  /// - parameter id: The `id` property of the module that needs to be restarted
  /// - throws: Any potential error returned by the targeted module
@@ -239,5 +241,48 @@ public extension ModuleContext {
   let tasks = self[id].tasks
   await tasks.cancel()
   try await tasks()
+ }
+
+ @inline(__always)
+ @discardableResult
+ /// Restart a subtask based on a module's `id` property.
+ ///
+ /// - parameter id: The `id` property of the module that needs to be restarted
+ /// - throws: Any potential error returned by the targeted module
+ ///
+ func restart(_ id: some Hashable) -> Task<(), any Error> {
+  let tasks = self[id].tasks
+  return Tasks.detached {
+   await tasks.cancel()
+   try await tasks()
+  }
+ }
+
+ @inline(__always)
+ @discardableResult
+ /// Restart a subcontext if it exists.
+ ///
+ /// - parameter id: The `id` property of the module that needs to be restarted
+ /// - throws: Any potential error returned by the targeted module
+ ///
+ func restartIfAvailable(_ id: some Hashable) -> Bool {
+  guard let tasks = self[checkedID: id]?.tasks else { return false }
+  Tasks.detached {
+   await tasks.cancel()
+   try await tasks()
+  }
+  return true
+ }
+
+ /// Wait for a specific tasks to finish running.
+ func wait(on id: some Hashable) async throws {
+  let tasks = self[id].tasks
+  try await tasks.wait()
+ }
+
+ /// Wait for a specific tasks to finish running, along with subtasks.
+ func waitForAll(on id: some Hashable) async throws {
+  let tasks = self[id].tasks
+  try await tasks.waitForAll()
  }
 }

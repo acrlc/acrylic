@@ -7,7 +7,7 @@ public protocol StaticModule: Module {
 public extension StaticModule {
  static var state: ModuleState {
   Reflection.cacheIfNeeded(
-   id: _mangledName, module: shared, stateType: ModuleState.self
+   id: _mangledName, module: { shared }, stateType: ModuleState.self
   )
  }
 

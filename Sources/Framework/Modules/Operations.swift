@@ -228,6 +228,61 @@ public actor Tasks:
  ) async rethrows -> T {
   try body()
  }
+ 
+ @_spi(ModuleReflection)
+ @discardableResult
+ public static func detached<T: Sendable>(
+  resultType: T.Type = T.self,
+  body: @Tasks @escaping () throws -> T,
+  onResult: @escaping (T) -> (),
+  onError: @escaping (any Error) -> ()
+ ) -> Task<(), Never> {
+  Task { @Tasks in
+   do {
+    try onResult(body())
+   } catch {
+    onError(error)
+   }
+  }
+ }
+ 
+ @_spi(ModuleReflection)
+ @discardableResult
+ public static func detached<T: Sendable>(
+  resultType: T.Type = T.self,
+  body: @Tasks @escaping () throws -> T,
+  onResult: @escaping (T) -> ()
+ ) -> Task<(), any Error> {
+  Task { @Tasks in
+   try onResult(body())
+  }
+ }
+ 
+ @_spi(ModuleReflection)
+ @discardableResult
+ public static func detached<T: Sendable>(
+  resultType: T.Type = T.self,
+  body: @Tasks @escaping () throws -> T,
+  onError: @escaping (any Error) -> ()
+ ) -> Task<T?, Never> {
+  Task { @Tasks in
+   do {
+    return try body()
+   } catch {
+    onError(error)
+   }
+   return nil
+  }
+ }
+ 
+ @_spi(ModuleReflection)
+ @discardableResult
+ public static func detached<T: Sendable>(
+  resultType: T.Type = T.self,
+  body: @Tasks @escaping () async throws -> T
+ ) -> Task<T, any Error> {
+  Task { @Tasks in try await body() }
+ }
 }
 
 extension Tasks: Collection {

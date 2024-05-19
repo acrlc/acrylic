@@ -57,6 +57,7 @@ struct TestContext: Tests {
     }
     return false
    }
+   
    Test("Check Context & Structure") {
     Assert {
      let next = try index.next.throwing().element

@@ -1,7 +1,7 @@
 import Foundation
 
 #if canImport(SwiftUI)
-import protocol SwiftUI.DynamicProperty
+@_exported import protocol SwiftUI.DynamicProperty
 #else
 /// An interface for a stored variable that updates an external property of a
 /// module.
@@ -39,28 +39,7 @@ extension AnyKeyPath: @unchecked Sendable {}
 // MARK: - Context Properties
 public protocol ContextualProperty: Identifiable, DynamicProperty, Sendable {
  nonisolated(unsafe) var id: Int { @Sendable get set }
- nonisolated(unsafe) var context: ModuleContext { get }
- @inlinable
- mutating func initialize()
- @inlinable
- mutating func initialize(with context: ModuleContext) async
-}
-
-public extension ContextualProperty {
- @_disfavoredOverload
- mutating func initialize() {}
- @_disfavoredOverload
- mutating func initialize(with context: ModuleContext) {}
- func move(from previous: ModuleContext, to context: ModuleContext) {
-  assert(previous != context, "previous context cannot be assigned to property")
-
-  if previous != context {
-   let id = id
-   if context.values[id] != nil {
-    previous.values.removeValue(forKey: id)
-   }
-  }
- }
+ nonisolated(unsafe) var context: ModuleContext { get set }
 }
 
 // MARK: - ContextProperty
@@ -68,31 +47,23 @@ public extension ContextualProperty {
 public struct
 ContextProperty<Value: Sendable>: @unchecked Sendable, ContextualProperty {
  public var id = UUID().hashValue
- public unowned var context: ModuleContext = .unknown
+ public unowned var context: ModuleContext = .unknown {
+  willSet {
+   initialize(from: context, to: newValue)
+  }
+ }
 
  @usableFromInline
- var initialValue: Value?
+ var initialValue: Any?
 
- private let lock = ReadWriteLock()
  public var wrappedValue: Value {
   get {
-   lock.withReaderLock {
-    if let value = context.values[id] as? Value {
-     return value
-    } else
-    if let optional = context.values[id] as? Value?, let value = optional {
-     return value
-    } else {
-     assert(
-      initialValue != nil,
-      "Please set \(Self.self) within an initializer or on the property"
-     )
-     return initialValue.unsafelyUnwrapped
-    }
+   context.values.withReaderLock {
+    $0[id].unsafelyUnwrapped as? Value ?? initialValue as! Value
    }
   }
   nonmutating set {
-   lock.withWriterLockVoid { context.values[self.id] = newValue }
+   context.values.withWriterLockVoid { $0[self.id] = newValue }
   }
  }
 
@@ -101,23 +72,37 @@ ContextProperty<Value: Sendable>: @unchecked Sendable, ContextualProperty {
  public var projectedValue: Self { self }
 }
 
-extension ContextProperty {
- public mutating func initialize() {
-  if let initialValue {
-   context.values[id] = initialValue
-   self.initialValue = nil
+public extension ContextProperty {
+ func update() {
+  Task { @Reflection in
+   guard context.state < .terminal else { return }
+   try await context.update()
   }
  }
- 
- public mutating func initialize(with context: ModuleContext) {
-  if let initialValue {
-   let id = id
-   if context.values.keys.contains(id) {
-    context.values[id] = initialValue
-    self.initialValue = nil
+
+ mutating func initialize(
+  from oldContext: ModuleContext, to newContext: ModuleContext
+ ) {
+  assert(
+   oldContext != newContext,
+   "previous context cannot be assigned to property"
+  )
+
+  let id = id
+  if let value = oldContext.values.withReaderLock({ $0[id] }) {
+   oldContext.values.withWriterLockVoid {
+    $0.removeValue(forKey: id)
+    newContext.values.withWriterLockVoid {
+     $0[id] = value
+     initialValue = nil
+    }
+   }
+  } else {
+   newContext.values.withWriterLockVoid {
+    $0[id] = initialValue
+    initialValue = nil
    }
   }
-  self.context = context
  }
 }
 
@@ -125,14 +110,13 @@ public extension ContextProperty {
  @inlinable
  init(wrappedValue: Value) { initialValue = wrappedValue }
 
- @inlinable
- init() where Value: Infallible { initialValue = .defaultValue }
+ init() where Value: ExpressibleByNilLiteral {
+  initialValue = Value(nilLiteral: ())
+ }
 
  @_disfavoredOverload
  @inlinable
- init() where Value: ExpressibleByNilLiteral {
-  initialValue = nil
- }
+ init() where Value: Infallible { initialValue = Value.defaultValue }
 
  @inlinable
  static func constant(_ value: Value) -> Self {
@@ -246,5 +230,7 @@ public extension Module {
 }
 
 extension ContextProperty: CustomStringConvertible {
- public var description: String { String(describing: wrappedValue) }
+ public var description: String {
+  String(describing: wrappedValue).readable
+ }
 }
