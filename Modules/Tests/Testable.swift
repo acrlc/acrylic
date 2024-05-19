@@ -1057,7 +1057,6 @@ public struct Blackhole<ID: Hashable>: TestProtocol, @unchecked Sendable {
   self.id = id
   sourceLocation = SourceLocation(
    fileID: fileID,
-
    line: line,
    column: column
   )
@@ -1073,7 +1072,6 @@ public struct Blackhole<ID: Hashable>: TestProtocol, @unchecked Sendable {
  ) where ID == EmptyID {
   sourceLocation = SourceLocation(
    fileID: fileID,
-
    line: line,
    column: column
   )
@@ -1091,7 +1089,6 @@ public struct Blackhole<ID: Hashable>: TestProtocol, @unchecked Sendable {
   self.id = id
   sourceLocation = SourceLocation(
    fileID: fileID,
-
    line: line,
    column: column
   )
@@ -1107,7 +1104,6 @@ public struct Blackhole<ID: Hashable>: TestProtocol, @unchecked Sendable {
  ) where ID == EmptyID {
   sourceLocation = SourceLocation(
    fileID: fileID,
-
    line: line,
    column: column
   )
@@ -1138,7 +1134,6 @@ public struct Identity
   self.id = id
   sourceLocation = SourceLocation(
    fileID: fileID,
-
    line: line,
    column: column
   )
@@ -1155,7 +1150,6 @@ public struct Identity
   where ID == EmptyID {
   sourceLocation = SourceLocation(
    fileID: fileID,
-
    line: line,
    column: column
   )
@@ -1174,7 +1168,6 @@ public struct Identity
   self.id = id
   sourceLocation = SourceLocation(
    fileID: fileID,
-
    line: line,
    column: column
   )
@@ -1191,7 +1184,6 @@ public struct Identity
   where ID == EmptyID {
   sourceLocation = SourceLocation(
    fileID: fileID,
-
    line: line,
    column: column
   )
