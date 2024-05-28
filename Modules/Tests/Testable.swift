@@ -1052,7 +1052,7 @@ public struct Blackhole<ID: Hashable>: TestProtocol, @unchecked Sendable {
   fileID: String = #fileID,
   line: Int = #line,
   column: Int = #column,
-  _ perform: @escaping () async throws -> some Any
+  _ perform: @escaping () async throws -> ()
  ) {
   self.id = id
   sourceLocation = SourceLocation(
@@ -1061,14 +1061,14 @@ public struct Blackhole<ID: Hashable>: TestProtocol, @unchecked Sendable {
    column: column
   )
 
-  self.perform = { _ = perform }
+  self.perform = perform
  }
 
  public init(
   fileID: String = #fileID,
   line: Int = #line,
   column: Int = #column,
-  _ perform: @escaping () async throws -> some Any
+  _ perform: @escaping () async throws -> ()
  ) where ID == EmptyID {
   sourceLocation = SourceLocation(
    fileID: fileID,
@@ -1076,7 +1076,7 @@ public struct Blackhole<ID: Hashable>: TestProtocol, @unchecked Sendable {
    column: column
   )
 
-  self.perform = { _ = perform }
+  self.perform = perform
  }
 
  public init(
@@ -1084,7 +1084,7 @@ public struct Blackhole<ID: Hashable>: TestProtocol, @unchecked Sendable {
   fileID: String = #fileID,
   line: Int = #line,
   column: Int = #column,
-  _ perform: @escaping @autoclosure () throws -> some Any
+  _ perform: @escaping @autoclosure () throws -> ()
  ) {
   self.id = id
   sourceLocation = SourceLocation(
@@ -1093,14 +1093,14 @@ public struct Blackhole<ID: Hashable>: TestProtocol, @unchecked Sendable {
    column: column
   )
 
-  self.perform = { _ = perform }
+  self.perform = perform
  }
 
  public init(
   fileID: String = #fileID,
   line: Int = #line,
   column: Int = #column,
-  _ perform: @escaping @autoclosure () throws -> some Any
+  _ perform: @escaping @autoclosure () throws -> ()
  ) where ID == EmptyID {
   sourceLocation = SourceLocation(
    fileID: fileID,
@@ -1108,7 +1108,7 @@ public struct Blackhole<ID: Hashable>: TestProtocol, @unchecked Sendable {
    column: column
   )
 
-  self.perform = { _ = perform }
+  self.perform = perform
  }
 
  public func callAsTest() async throws { try await perform() }
