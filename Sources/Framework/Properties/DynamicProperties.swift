@@ -276,6 +276,13 @@ public extension App {
   where A: StaticModule
  typealias ObservedAlias<A, Value> = _ObservedModuleAliasProperty<A, Value>
   where A: ObservableModule
+ typealias ContextAlias<A, Value> = _ObservedContextAliasProperty<A, Value>
+  where A: ContextModule
+ typealias StaticObservedAlias<A, Value> = _StaticObservedModuleAliasProperty<
+  A,
+  Value
+ >
+  where A: StaticModule
 }
 
 public extension Scene {
@@ -324,7 +331,7 @@ public struct _ObservedModuleAliasProperty
  }
 
  // FIXME: context properties to update context here (from projectedValue)
- #if os(macOS) || os(iOS)
+ #if canImport(SwiftUI) || canImport(TokamakDOM)
  var animation: Animation?
  public var projectedValue: Binding<Value> {
   if let animation {
@@ -340,6 +347,13 @@ public struct _ObservedModuleAliasProperty
     set: { newValue in wrappedValue = newValue }
    )
   }
+ }
+ #else
+ public var projectedValue: Binding<Value> {
+  Binding<Value>(
+   get: { wrappedValue },
+   set: { newValue in wrappedValue = newValue }
+  )
  }
  #endif
 }
@@ -464,7 +478,6 @@ extension _ObservedModuleAliasProperty: ObservedProperty {
  }
 }
 #endif
-
 
 @propertyWrapper
 public struct _StaticObservedModuleAliasProperty
@@ -654,16 +667,16 @@ public struct _StaticModuleAliasProperty
  public var id = A._mangledName.hashValue
  @usableFromInline
  let keyPath: WritableKeyPath<A, Value>
- 
+
  public unowned var context: ModuleContext = .unknown
- 
+
  @inlinable
  public var wrappedValue: Value {
   nonmutating get { A.shared[keyPath: keyPath] }
   nonmutating set { A.shared[keyPath: keyPath] = newValue }
  }
- 
-#if os(macOS) || os(iOS)
+
+ #if os(macOS) || os(iOS)
  var animation: Animation?
  public var projectedValue: Binding<Value> {
   if let animation {
@@ -680,7 +693,7 @@ public struct _StaticModuleAliasProperty
    )
   }
  }
-#endif
+ #endif
 }
 
 @Reflection(unsafe)
@@ -699,7 +712,7 @@ public extension _StaticModuleAliasProperty {
   context = wrapper.context
   id = wrapper.id
  }
- 
+
  init(_ keyPath: KeyPath<A, ContextProperty<Value>>, _ call: Bool = false) {
   Reflection.cacheOrCall(
    moduleType: A.self,
@@ -711,7 +724,7 @@ public extension _StaticModuleAliasProperty {
   context = wrapper.context
   id = wrapper.id
  }
- 
+
  @_disfavoredOverload
  init(_ keyPath: WritableKeyPath<A, Value>, _ call: Bool = false) {
   self.keyPath = keyPath
@@ -721,7 +734,7 @@ public extension _StaticModuleAliasProperty {
    call: call
   ).context
  }
- 
+
  @_disfavoredOverload
  init(_ type: A.Type, _ call: Bool = false) where Value == A {
   keyPath = \A.self
@@ -731,8 +744,8 @@ public extension _StaticModuleAliasProperty {
    call: call
   ).context
  }
- 
-#if os(macOS) || os(iOS)
+
+ #if os(macOS) || os(iOS)
  init(
   wrappedValue: Value,
   _ keyPath: KeyPath<A, ContextProperty<Value>>, _ call: Bool = false,
@@ -749,7 +762,7 @@ public extension _StaticModuleAliasProperty {
   id = wrapper.id
   self.animation = animation
  }
- 
+
  init(
   _ keyPath: KeyPath<A, ContextProperty<Value>>,
   _ call: Bool = false,
@@ -766,7 +779,7 @@ public extension _StaticModuleAliasProperty {
   id = wrapper.id
   self.animation = animation
  }
- 
+
  @_disfavoredOverload
  init(
   _ keyPath: WritableKeyPath<A, Value>,
@@ -781,10 +794,10 @@ public extension _StaticModuleAliasProperty {
   ).context
   self.animation = animation
  }
- 
+
  @_disfavoredOverload
  init(_ type: A.Type, _ call: Bool = false, animation: Animation)
- where Value == A {
+  where Value == A {
   keyPath = \A.self
   context = Reflection.cacheOrCall(
    moduleType: A.self,
@@ -793,7 +806,7 @@ public extension _StaticModuleAliasProperty {
   ).context
   self.animation = animation
  }
-#endif
+ #endif
 }
 
 @propertyWrapper
@@ -801,12 +814,12 @@ public struct _ContextAliasProperty
 <A: ContextModule, Value: Sendable>:
  @unchecked Sendable, ContextualProperty {
  public var id = A._mangledName.hashValue
- 
+
  @usableFromInline
  let keyPath: WritableKeyPath<A, Value>
- 
+
  public unowned var context: ModuleContext = .unknown
- 
+
  @Reflection(unsafe)
  @usableFromInline
  var module: A {
@@ -823,15 +836,15 @@ public struct _ContextAliasProperty
    ).context.index.element = newValue
   }
  }
- 
+
  @inlinable
  public var wrappedValue: Value {
   nonmutating get { module[keyPath: keyPath] }
   nonmutating set { module[keyPath: keyPath] = newValue }
  }
- 
+
  // FIXME: context properties to update context here (from projectedValue)
-#if os(macOS) || os(iOS)
+ #if os(macOS) || os(iOS)
  var animation: Animation?
  public var projectedValue: Binding<Value> {
   if let animation {
@@ -848,7 +861,7 @@ public struct _ContextAliasProperty
    )
   }
  }
-#endif
+ #endif
 }
 
 @Reflection(unsafe)
@@ -864,14 +877,14 @@ public extension _ContextAliasProperty {
    stateType: ModuleState.self,
    call: call
   )
-  
+
   let module = Reflection.states[id]!.context.index.element as! A
   let wrapper = module[keyPath: keyPath]
-  
+
   context = wrapper.context
   id = wrapper.id
  }
- 
+
  init(_ keyPath: KeyPath<A, ContextProperty<Value>>, _ call: Bool = false) {
   Reflection.cacheOrCall(
    id: A._mangledName,
@@ -879,16 +892,16 @@ public extension _ContextAliasProperty {
    stateType: ModuleState.self,
    call: call
   )
-  
+
   self.keyPath = keyPath.appending(path: \.wrappedValue)
-  
+
   let module = Reflection.states[id]!.context.index.element as! A
   let wrapper = module[keyPath: keyPath]
-  
+
   context = wrapper.context
   id = wrapper.id
  }
- 
+
  @_disfavoredOverload
  init(_ keyPath: WritableKeyPath<A, Value>, _ call: Bool = false) {
   self.keyPath = keyPath
@@ -899,7 +912,7 @@ public extension _ContextAliasProperty {
    call: call
   ).context
  }
- 
+
  @_disfavoredOverload
  init(_ type: A.Type, _ call: Bool = false) where Value == A {
   keyPath = \A.self
@@ -910,8 +923,8 @@ public extension _ContextAliasProperty {
    call: call
   ).context
  }
- 
-#if os(macOS) || os(iOS)
+
+ #if os(macOS) || os(iOS)
  init(
   wrappedValue: Value,
   _ keyPath: KeyPath<A, ContextProperty<Value>>, _ call: Bool = false,
@@ -924,14 +937,14 @@ public extension _ContextAliasProperty {
    stateType: ModuleState.self,
    call: call
   )
-  
+
   let module = Reflection.states[id]!.context.index.element as! A
   let wrapper = module[keyPath: keyPath]
-  
+
   context = wrapper.context
   id = wrapper.id
  }
- 
+
  init(
   _ keyPath: KeyPath<A, ContextProperty<Value>>, _ call: Bool = false,
   animation: Animation
@@ -942,16 +955,16 @@ public extension _ContextAliasProperty {
    stateType: ModuleState.self,
    call: call
   )
-  
+
   self.keyPath = keyPath.appending(path: \.wrappedValue)
-  
+
   let module = Reflection.states[id]!.context.index.element as! A
   let wrapper = module[keyPath: keyPath]
-  
+
   context = wrapper.context
   id = wrapper.id
  }
- 
+
  @_disfavoredOverload
  init(
   _ keyPath: WritableKeyPath<A, Value>,
@@ -967,10 +980,10 @@ public extension _ContextAliasProperty {
   ).context
   self.animation = animation
  }
- 
+
  @_disfavoredOverload
  init(_ type: A.Type, _ call: Bool = false, animation: Animation)
- where Value == A {
+  where Value == A {
   keyPath = \A.self
   context = Reflection.cacheOrCall(
    id: A._mangledName,
@@ -980,16 +993,13 @@ public extension _ContextAliasProperty {
   ).context
   self.animation = animation
  }
- 
-#endif
+
+ #endif
 }
 
 public extension Module {
  typealias Alias<A, Value> = _StaticModuleAliasProperty<A, Value>
- where A: StaticModule
+  where A: StaticModule
  typealias ContextAlias<A, Value> = _ContextAliasProperty<A, Value>
- where A: ContextModule
+  where A: ContextModule
 }
-
-
-

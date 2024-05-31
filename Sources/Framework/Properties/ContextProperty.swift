@@ -43,6 +43,7 @@ public protocol ContextualProperty: Identifiable, DynamicProperty, Sendable {
 }
 
 // MARK: - ContextProperty
+@dynamicMemberLookup
 @propertyWrapper
 public struct
 ContextProperty<Value: Sendable>: @unchecked Sendable, ContextualProperty {
@@ -59,7 +60,7 @@ ContextProperty<Value: Sendable>: @unchecked Sendable, ContextualProperty {
  public var wrappedValue: Value {
   get {
    context.values.withReaderLock {
-    $0[id].unsafelyUnwrapped as? Value ?? initialValue as! Value
+    $0[id] as? Value ?? initialValue as! Value
    }
   }
   nonmutating set {
@@ -67,9 +68,36 @@ ContextProperty<Value: Sendable>: @unchecked Sendable, ContextualProperty {
   }
  }
 
- public init() {}
  @inlinable
  public var projectedValue: Self { self }
+
+ public subscript<A>(
+  dynamicMember keyPath: WritableKeyPath<Value, A>
+ ) -> ContextProperty<A> {
+  get { .constant(wrappedValue[keyPath: keyPath]) }
+  nonmutating set {
+   wrappedValue[keyPath: keyPath] = newValue.wrappedValue
+  }
+ }
+
+ @inlinable
+ public init(wrappedValue: Value) { initialValue = wrappedValue }
+
+ public init() where Value: ExpressibleByNilLiteral {
+  initialValue = Value(nilLiteral: ())
+ }
+ 
+ @_disfavoredOverload
+ public init() {}
+
+ @_disfavoredOverload
+ @inlinable
+ public init() where Value: Infallible { initialValue = Value.defaultValue }
+
+ @inlinable
+ public static func constant(_ value: Value) -> Self {
+  Self(wrappedValue: value)
+ }
 }
 
 public extension ContextProperty {
@@ -103,24 +131,6 @@ public extension ContextProperty {
     initialValue = nil
    }
   }
- }
-}
-
-public extension ContextProperty {
- @inlinable
- init(wrappedValue: Value) { initialValue = wrappedValue }
-
- init() where Value: ExpressibleByNilLiteral {
-  initialValue = Value(nilLiteral: ())
- }
-
- @_disfavoredOverload
- @inlinable
- init() where Value: Infallible { initialValue = Value.defaultValue }
-
- @inlinable
- static func constant(_ value: Value) -> Self {
-  self.init(wrappedValue: value)
  }
 }
 
@@ -209,19 +219,12 @@ public extension ContextProperty {
 #endif
 
 public extension ContextProperty {
- @inlinable
- @discardableResult
- func withUpdate<A: Sendable>(
-  _ body: @escaping () throws -> A
- ) async rethrows -> A {
-  try body()
- }
-
- @inlinable
+ @inline(__always)
  func update(
   _ newValue: @escaping @autoclosure () -> Value = ()
- ) async {
+ ) async throws {
   wrappedValue = newValue()
+  try await context.update()
  }
 }
 
@@ -234,3 +237,150 @@ extension ContextProperty: CustomStringConvertible {
   String(describing: wrappedValue).readable
  }
 }
+
+extension ContextProperty: Codable where Value: Codable {
+ public init(from decoder: Decoder) throws {
+  let container = try decoder.singleValueContainer()
+  self.initialValue = try container.decode(Value.self)
+ }
+
+ public func encode(to encoder: Encoder) throws {
+  var container = encoder.singleValueContainer()
+  try container.encode(self.wrappedValue)
+ }
+}
+
+// MARK: - Pesistent Implementation
+#if canImport(Persistence)
+import Persistence
+
+@dynamicMemberLookup
+@propertyWrapper
+public struct DefaultsContextProperty<Defaults, Key, Value>:
+ ContextualProperty where Defaults: CustomUserDefaults, Key: UserDefaultsKey {
+ public subscript<A>(
+  dynamicMember keyPath: WritableKeyPath<Value, A>
+ ) -> ContextProperty<A> {
+  get { .constant(wrappedValue[keyPath: keyPath]) }
+  nonmutating set {
+   wrappedValue[keyPath: keyPath] = newValue.wrappedValue
+  }
+ }
+
+ @inline(__always)
+ @usableFromInline
+ var defaults: DefaultsProperty<Defaults, Key, Value>
+ @inline(__always)
+ @usableFromInline
+ var wrapped: ContextProperty<Value>
+
+ @_transparent
+ public var id: Int { get { wrapped.id } set { wrapped.id = newValue } }
+
+ @_transparent
+ public var context: ModuleContext {
+  get { wrapped.context }
+  set { wrapped.context = newValue }
+ }
+
+ @_transparent
+ public var wrappedValue: Value {
+  get { defaults.wrappedValue }
+  nonmutating set {
+   wrapped.wrappedValue = newValue
+   defaults.wrappedValue = newValue
+  }
+ }
+
+ public var projectedValue: ContextProperty<Value> {
+  get { .constant(wrappedValue) }
+  nonmutating set {
+   wrapped.wrappedValue = newValue.wrappedValue
+   defaults.wrappedValue = newValue.wrappedValue
+  }
+ }
+
+ public init(_ key: Key)
+  where Defaults == CustomUserDefaults, Value == Key.Value {
+  self.defaults = DefaultsProperty(key)
+  self.wrapped = .constant(defaults.wrappedValue)
+ }
+
+ public init(
+  _ key: Key, _ keyPath: WritableKeyPath<Key.Value, Value>
+ ) where Defaults == CustomUserDefaults {
+  self.defaults = DefaultsProperty(key, keyPath)
+  self.wrapped = .constant(defaults.wrappedValue)
+ }
+}
+
+@dynamicMemberLookup
+@propertyWrapper
+public struct StandardDefaultsContextProperty<Defaults, Key, Value>:
+ ContextualProperty
+ where Defaults: CustomUserDefaults, Key: StandardUserDefaultsKey {
+ public subscript<A>(
+  dynamicMember keyPath: WritableKeyPath<Value, A>
+ ) -> ContextProperty<A> {
+  get { .constant(wrappedValue[keyPath: keyPath]) }
+  nonmutating set {
+   wrappedValue[keyPath: keyPath] = newValue.wrappedValue
+  }
+ }
+
+ @inline(__always)
+ @usableFromInline
+ var defaults: DefaultsProperty<Defaults, Key, Value>
+ @inline(__always)
+ @usableFromInline
+ var wrapped: ContextProperty<Value>
+
+ @_transparent
+ public var id: Int { get { wrapped.id } set { wrapped.id = newValue } }
+
+ @_transparent
+ public var context: ModuleContext {
+  get { wrapped.context }
+  set { wrapped.context = newValue }
+ }
+
+ @_transparent
+ public var wrappedValue: Value {
+  get { defaults.wrappedValue }
+  nonmutating set {
+   wrapped.wrappedValue = newValue
+   defaults.wrappedValue = newValue
+  }
+ }
+
+ public var projectedValue: ContextProperty<Value> {
+  get { .constant(wrappedValue) }
+  nonmutating set {
+   wrapped.wrappedValue = newValue.wrappedValue
+   defaults.wrappedValue = newValue.wrappedValue
+  }
+ }
+
+ public init(_ key: Key)
+  where Defaults == CustomUserDefaults, Value == Key.Value {
+  self.defaults = DefaultsProperty(key)
+  self.wrapped = .constant(defaults.wrappedValue)
+ }
+
+ public init(
+  _ key: Key, _ keyPath: WritableKeyPath<Key.Value, Value>
+ ) where Defaults == CustomUserDefaults {
+  self.defaults = DefaultsProperty(key, keyPath)
+  self.wrapped = .constant(defaults.wrappedValue)
+ }
+}
+
+public extension Module {
+ typealias DefaultContext<Key, Value> =
+  DefaultsContextProperty<CustomUserDefaults, Key, Value>
+   where Key: UserDefaultsKey
+ typealias StandardDefaultContext<Key, Value> =
+  StandardDefaultsContextProperty<CustomUserDefaults, Key, Value>
+   where Key: StandardUserDefaultsKey
+}
+#endif
