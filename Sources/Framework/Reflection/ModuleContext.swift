@@ -225,7 +225,7 @@ public extension ModuleContext {
 
  @inline(__always)
  subscript<ID: Hashable>(checkedID id: ID) -> ModuleContext? {
-  cache.values.first(where: { $0.index.element.id as? ID ~= id })
+  cache.values.first(where: { $0.index.element.id as? ID == id })
  }
 }
 
