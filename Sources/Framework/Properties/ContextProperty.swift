@@ -55,17 +55,13 @@ ContextProperty<Value: Sendable>: @unchecked Sendable, ContextualProperty {
  }
 
  @usableFromInline
- var initialValue: Any?
+ var get: ((Self) -> Value)!
+ @usableFromInline
+ var set: ((Self, Value) -> ())!
 
  public var wrappedValue: Value {
-  get {
-   context.values.withReaderLock {
-    $0[id] as? Value ?? initialValue as! Value
-   }
-  }
-  nonmutating set {
-   context.values.withWriterLockVoid { $0[self.id] = newValue }
-  }
+  get { get(self) }
+  nonmutating set { set(self, newValue) }
  }
 
  @inlinable
@@ -80,23 +76,67 @@ ContextProperty<Value: Sendable>: @unchecked Sendable, ContextualProperty {
   }
  }
 
- @inlinable
- public init(wrappedValue: Value) { initialValue = wrappedValue }
+ public init(
+  get: @escaping () -> Value,
+  set: @escaping (Value) -> ()
+ ) {
+  self.get = { _ in get() }
+  self.set = { _, newValue in set(newValue) }
+ }
+
+ public init(
+  get: @escaping (Self) -> Value,
+  set: @escaping (Self, Value) -> ()
+ ) {
+  self.get = get
+  self.set = set
+ }
+
+ static func binding(
+  get: @escaping (Self) -> Value,
+  set: @escaping (Self, Value) -> ()
+ ) -> Self {
+  self.init(get: get, set: set)
+ }
+
+ static func binding(
+  get: @escaping () -> Value,
+  set: @escaping (Value) -> ()
+ ) -> Self {
+  self.init(get: get, set: set)
+ }
+
+ static func bindingInitalValueWithContext(_ initialValue: Value) -> Self {
+  self.init(
+   get: { `self` in
+    self.context.values.withReaderLock {
+     $0[self.id] as? Value ?? initialValue
+    }
+   }, set: { `self`, newValue in
+    self.context.values.withWriterLockVoid { $0[self.id] = newValue }
+   }
+  )
+ }
+
+ public static func constant(_ value: Value) -> Self {
+  .bindingInitalValueWithContext(value)
+ }
+
+ public init(wrappedValue: Value) {
+  self = .bindingInitalValueWithContext(wrappedValue)
+ }
 
  public init() where Value: ExpressibleByNilLiteral {
-  initialValue = Value(nilLiteral: ())
+  self = .bindingInitalValueWithContext(nil)
  }
- 
+
+ /// Initializer for properties that are intended to be replaced during runtime
  @_disfavoredOverload
  public init() {}
 
  @_disfavoredOverload
- @inlinable
- public init() where Value: Infallible { initialValue = Value.defaultValue }
-
- @inlinable
- public static func constant(_ value: Value) -> Self {
-  Self(wrappedValue: value)
+ public init() where Value: Infallible {
+  self = .bindingInitalValueWithContext(.defaultValue)
  }
 }
 
@@ -122,13 +162,11 @@ public extension ContextProperty {
     $0.removeValue(forKey: id)
     newContext.values.withWriterLockVoid {
      $0[id] = value
-     initialValue = nil
     }
    }
   } else {
    newContext.values.withWriterLockVoid {
-    $0[id] = initialValue
-    initialValue = nil
+    $0[id] = get(self)
    }
   }
  }
@@ -241,7 +279,8 @@ extension ContextProperty: CustomStringConvertible {
 extension ContextProperty: Codable where Value: Codable {
  public init(from decoder: Decoder) throws {
   let container = try decoder.singleValueContainer()
-  self.initialValue = try container.decode(Value.self)
+  let initialValue = try container.decode(Value.self)
+  self = .bindingInitalValueWithContext(initialValue)
  }
 
  public func encode(to encoder: Encoder) throws {
@@ -293,11 +332,10 @@ public struct DefaultsContextProperty<Defaults, Key, Value>:
  }
 
  public var projectedValue: ContextProperty<Value> {
-  get { .constant(wrappedValue) }
-  nonmutating set {
-   wrapped.wrappedValue = newValue.wrappedValue
-   defaults.wrappedValue = newValue.wrappedValue
-  }
+  ContextProperty(
+   get: { wrappedValue },
+   set: { wrappedValue = $0 }
+  )
  }
 
  public init(_ key: Key)
@@ -354,11 +392,10 @@ public struct StandardDefaultsContextProperty<Defaults, Key, Value>:
  }
 
  public var projectedValue: ContextProperty<Value> {
-  get { .constant(wrappedValue) }
-  nonmutating set {
-   wrapped.wrappedValue = newValue.wrappedValue
-   defaults.wrappedValue = newValue.wrappedValue
-  }
+  ContextProperty(
+   get: { wrappedValue },
+   set: { wrappedValue = $0 }
+  )
  }
 
  public init(_ key: Key)
