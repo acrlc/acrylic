@@ -68,21 +68,10 @@ public struct _ObservedContextAliasProperty
  public unowned var context: ModuleContext = .unknown
  #endif
 
- @Reflection(unsafe)
  @usableFromInline
  var module: A {
-  nonmutating get {
-   Reflection.cacheIfNeeded(
-    id: A._mangledName, module: { A() }, stateType: ModuleState.self
-   ).context.index.element as! A
-  }
-  nonmutating set {
-   Reflection.cacheIfNeeded(
-    id: A._mangledName,
-    module: { A() },
-    stateType: ModuleState.self
-   ).context.index.element = newValue
-  }
+  nonmutating get { context.index.element as! A }
+  nonmutating set { context.index.element = newValue }
  }
 
  @inlinable
@@ -495,10 +484,16 @@ public struct _StaticObservedModuleAliasProperty
  public unowned var context: ModuleContext = .unknown
  #endif
 
+ @usableFromInline
+ var module: A {
+  nonmutating get { context.index.element as! A }
+  nonmutating set { context.index.element = newValue }
+ }
+
  @inlinable
  public var wrappedValue: Value {
-  nonmutating get { A.shared[keyPath: keyPath] }
-  nonmutating set { A.shared[keyPath: keyPath] = newValue }
+  nonmutating get { module[keyPath: keyPath] }
+  nonmutating set { module[keyPath: keyPath] = newValue }
  }
 
  // FIXME: context properties to update context here (from projectedValue)
@@ -528,6 +523,7 @@ public extension _StaticObservedModuleAliasProperty {
   wrappedValue: Value,
   _ keyPath: KeyPath<A, ContextProperty<Value>>, _ call: Bool = false
  ) {
+  assert(!(A.self is AnyObject.Type), "class modules aren't supported")
   self.keyPath = keyPath.appending(path: \.wrappedValue)
   Reflection.cacheOrCall(
    moduleType: A.self,
@@ -543,6 +539,7 @@ public extension _StaticObservedModuleAliasProperty {
  }
 
  init(_ keyPath: KeyPath<A, ContextProperty<Value>>, _ call: Bool = false) {
+  assert(!(A.self is AnyObject.Type), "class modules aren't supported")
   Reflection.cacheOrCall(
    moduleType: A.self,
    stateType: ModuleState.self,
@@ -559,6 +556,7 @@ public extension _StaticObservedModuleAliasProperty {
 
  @_disfavoredOverload
  init(_ keyPath: WritableKeyPath<A, Value>, _ call: Bool = false) {
+  assert(!(A.self is AnyObject.Type), "class modules aren't supported")
   self.keyPath = keyPath
   _context = .init(
    wrappedValue:
@@ -572,6 +570,7 @@ public extension _StaticObservedModuleAliasProperty {
 
  @_disfavoredOverload
  init(_ type: A.Type, _ call: Bool = false) where Value == A {
+  assert(!(A.self is AnyObject.Type), "class modules aren't supported")
   keyPath = \A.self
   _context = .init(
    wrappedValue:
@@ -589,6 +588,7 @@ public extension _StaticObservedModuleAliasProperty {
   _ keyPath: KeyPath<A, ContextProperty<Value>>, _ call: Bool = false,
   animation: Animation
  ) {
+  assert(!(A.self is AnyObject.Type), "class modules aren't supported")
   self.keyPath = keyPath.appending(path: \.wrappedValue)
   Reflection.cacheOrCall(
    moduleType: A.self,
@@ -608,6 +608,7 @@ public extension _StaticObservedModuleAliasProperty {
   _ keyPath: KeyPath<A, ContextProperty<Value>>, _ call: Bool = false,
   animation: Animation
  ) {
+  assert(!(A.self is AnyObject.Type), "class modules aren't supported")
   Reflection.cacheOrCall(
    moduleType: A.self,
    stateType: ModuleState.self,
@@ -629,6 +630,7 @@ public extension _StaticObservedModuleAliasProperty {
   _ call: Bool = false,
   animation: Animation
  ) {
+  assert(!(A.self is AnyObject.Type), "class modules aren't supported")
   self.keyPath = keyPath
   _context = .init(
    wrappedValue:
@@ -644,6 +646,7 @@ public extension _StaticObservedModuleAliasProperty {
  @_disfavoredOverload
  init(_ type: A.Type, _ call: Bool = false, animation: Animation)
   where Value == A {
+  assert(!(A.self is AnyObject.Type), "class modules aren't supported")
   keyPath = \A.self
   _context = .init(
    wrappedValue:
@@ -670,10 +673,16 @@ public struct _StaticModuleAliasProperty
 
  public unowned var context: ModuleContext = .unknown
 
+ @usableFromInline
+ var module: A {
+  nonmutating get { context.index.element as! A }
+  nonmutating set { context.index.element = newValue }
+ }
+
  @inlinable
  public var wrappedValue: Value {
-  nonmutating get { A.shared[keyPath: keyPath] }
-  nonmutating set { A.shared[keyPath: keyPath] = newValue }
+  nonmutating get { module[keyPath: keyPath] }
+  nonmutating set { module[keyPath: keyPath] = newValue }
  }
 
  #if os(macOS) || os(iOS)
@@ -702,6 +711,7 @@ public extension _StaticModuleAliasProperty {
   wrappedValue: Value,
   _ keyPath: KeyPath<A, ContextProperty<Value>>, _ call: Bool = false
  ) {
+  assert(!(A.self is AnyObject.Type), "class modules aren't supported")
   self.keyPath = keyPath.appending(path: \.wrappedValue)
   Reflection.cacheOrCall(
    moduleType: A.self,
@@ -714,6 +724,7 @@ public extension _StaticModuleAliasProperty {
  }
 
  init(_ keyPath: KeyPath<A, ContextProperty<Value>>, _ call: Bool = false) {
+  assert(!(A.self is AnyObject.Type), "class modules aren't supported")
   Reflection.cacheOrCall(
    moduleType: A.self,
    stateType: ModuleState.self,
@@ -727,6 +738,7 @@ public extension _StaticModuleAliasProperty {
 
  @_disfavoredOverload
  init(_ keyPath: WritableKeyPath<A, Value>, _ call: Bool = false) {
+  assert(!(A.self is AnyObject.Type), "class modules aren't supported")
   self.keyPath = keyPath
   context = Reflection.cacheOrCall(
    moduleType: A.self,
@@ -737,6 +749,7 @@ public extension _StaticModuleAliasProperty {
 
  @_disfavoredOverload
  init(_ type: A.Type, _ call: Bool = false) where Value == A {
+  assert(!(A.self is AnyObject.Type), "class modules aren't supported")
   keyPath = \A.self
   context = Reflection.cacheOrCall(
    moduleType: A.self,
@@ -751,6 +764,7 @@ public extension _StaticModuleAliasProperty {
   _ keyPath: KeyPath<A, ContextProperty<Value>>, _ call: Bool = false,
   animation: Animation
  ) {
+  assert(!(A.self is AnyObject.Type), "class modules aren't supported")
   self.keyPath = keyPath.appending(path: \.wrappedValue)
   Reflection.cacheOrCall(
    moduleType: A.self,
@@ -768,6 +782,7 @@ public extension _StaticModuleAliasProperty {
   _ call: Bool = false,
   animation: Animation
  ) {
+  assert(!(A.self is AnyObject.Type), "class modules aren't supported")
   Reflection.cacheOrCall(
    moduleType: A.self,
    stateType: ModuleState.self,
@@ -786,6 +801,7 @@ public extension _StaticModuleAliasProperty {
   _ call: Bool = false,
   animation: Animation
  ) {
+  assert(!(A.self is AnyObject.Type), "class modules aren't supported")
   self.keyPath = keyPath
   context = Reflection.cacheOrCall(
    moduleType: A.self,
@@ -798,6 +814,7 @@ public extension _StaticModuleAliasProperty {
  @_disfavoredOverload
  init(_ type: A.Type, _ call: Bool = false, animation: Animation)
   where Value == A {
+  assert(!(A.self is AnyObject.Type), "class modules aren't supported")
   keyPath = \A.self
   context = Reflection.cacheOrCall(
    moduleType: A.self,
@@ -823,18 +840,8 @@ public struct _ContextAliasProperty
  @Reflection(unsafe)
  @usableFromInline
  var module: A {
-  nonmutating get {
-   Reflection.cacheIfNeeded(
-    id: A._mangledName, module: { A() }, stateType: ModuleState.self
-   ).context.index.element as! A
-  }
-  nonmutating set {
-   Reflection.cacheIfNeeded(
-    id: A._mangledName,
-    module: { A() },
-    stateType: ModuleState.self
-   ).context.index.element = newValue
-  }
+  nonmutating get { context.index.element as! A }
+  nonmutating set { context.index.element = newValue }
  }
 
  @inlinable
