@@ -289,6 +289,28 @@ extension ContextProperty: Codable where Value: Codable {
  }
 }
 
+extension ContextProperty {
+ func withBinding(
+  get: @escaping (Self) -> Value,
+  set: @escaping (Self, Value) -> ()
+ ) -> Self {
+  var copy = self
+  copy.get = get
+  copy.set = set
+  return copy
+ }
+
+ func withBinding(
+  get: @escaping () -> Value,
+  set: @escaping (Value) -> ()
+ ) -> Self {
+  var copy = self
+  copy.get = { _ in get() }
+  copy.set = { _, newValue in set(newValue) }
+  return copy
+ }
+}
+
 // MARK: - Pesistent Implementation
 #if canImport(Persistence)
 import Persistence
@@ -332,7 +354,7 @@ public struct DefaultsContextProperty<Defaults, Key, Value>:
  }
 
  public var projectedValue: ContextProperty<Value> {
-  ContextProperty(
+  wrapped.withBinding(
    get: { wrappedValue },
    set: { wrappedValue = $0 }
   )
@@ -392,7 +414,7 @@ public struct StandardDefaultsContextProperty<Defaults, Key, Value>:
  }
 
  public var projectedValue: ContextProperty<Value> {
-  ContextProperty(
+  wrapped.withBinding(
    get: { wrappedValue },
    set: { wrappedValue = $0 }
   )
