@@ -62,7 +62,7 @@ public struct _ObservedContextAliasProperty
  let keyPath: WritableKeyPath<A, Value>
 
  #if canImport(SwiftUI) || canImport(TokamakDOM)
- @StateObject
+ @ObservedObject
  public var context: ModuleContext = .unknown
  #else
  public unowned var context: ModuleContext = .unknown
@@ -478,7 +478,7 @@ public struct _StaticObservedModuleAliasProperty
  let keyPath: WritableKeyPath<A, Value>
 
  #if canImport(SwiftUI) || canImport(TokamakDOM)
- @StateObject
+ @ObservedObject
  public var context: ModuleContext = .unknown
  #else
  public unowned var context: ModuleContext = .unknown
