@@ -55,9 +55,16 @@ ContextProperty<Value: Sendable>: @unchecked Sendable, ContextualProperty {
  }
 
  @usableFromInline
- var get: ((Self) -> Value)!
+ var get: (Self) -> Value = { `self` in
+  self.context.values.withReaderLock {
+   $0[self.id] as! Value
+  }
+ }
+  
  @usableFromInline
- var set: ((Self, Value) -> ())!
+ var set: (Self, Value) -> () = { `self`, newValue in
+  self.context.values.withWriterLockVoid { $0[self.id] = newValue }
+ }
 
  public var wrappedValue: Value {
   get { get(self) }
