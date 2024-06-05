@@ -7,7 +7,7 @@ public extension CommandModule {
  mutating func main() async throws {
   do { try await callWithContext() }
   catch {
-   exit(Int32(error._code))
+   exit(error)
   }
  }
 }
