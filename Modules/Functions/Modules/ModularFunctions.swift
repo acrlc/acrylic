@@ -49,7 +49,7 @@ public extension ModularFunctions {
   }
 
   public func callAsFunction() {
-   debugPrint(
+   print(
     items as [Any], separator: separator, terminator: terminator
    )
   }
