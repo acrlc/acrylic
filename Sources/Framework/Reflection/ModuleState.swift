@@ -1,9 +1,11 @@
 import struct Core.UnsafeRecursiveNode
-@_spi(Reflection) import func ReflectionMirror._forEachFieldWithKeyPath
+@_spi(Reflection) import ReflectionMirror
+import SwiftShims
 
 @_spi(ModuleReflection)
 public protocol StateActor: Sendable {
- nonisolated(unsafe) var context: ModuleContext { get }
+ @preconcurrency
+ var context: ModuleContext { get }
  @Reflection
  @discardableResult
  func update() async throws -> (any Module)?
@@ -19,9 +21,9 @@ extension ModuleIndex: @unchecked Sendable {}
 
 // MARK: - Default Implementation
 @_spi(ModuleReflection)
-public actor ModuleState: @unchecked Sendable, StateActor {
+public struct ModuleState: @unchecked Sendable, StateActor {
  public static var unknown: Self { Self() }
- public nonisolated(unsafe) var context = ModuleContext()
+ public var context = ModuleContext()
  public init() {}
 }
 
@@ -199,6 +201,13 @@ public extension AsyncFunction {
  }
 }
 
+extension Module {
+ @_transparent
+ var isClassType: Bool {
+  swift_isClassType(unsafeBitCast(Self.self, to: UnsafeRawPointer.self))
+ }
+}
+
 @_spi(ModuleReflection)
 @Reflection
 public extension Module {
@@ -215,19 +224,23 @@ public extension Module {
  }
 
  func newContext(
-  from index: consuming ModuleIndex,
+  from index: ModuleIndex,
   actor: consuming some StateActor
  ) -> ModuleContext {
   var properties = DynamicProperties()
 
-  _forEachFieldWithKeyPath(of: Self.self) { char, keyPath in
-   let label = String(cString: char)
-   if
-    label.hasPrefix("_"),
-    let property = self[keyPath: keyPath] as? any DynamicProperty {
-    properties.append((label, keyPath, property))
-   }
-   return true
+  if !index.element.isClassType {
+   ReflectionMirror._forEachFieldWithKeyPath(
+    of: Self.self, options: .ignoreUnknown
+    ) { char, keyPath in
+     let label = String(cString: char)
+     if
+      label.hasPrefix("_"),
+      let property = self[keyPath: keyPath] as? any DynamicProperty {
+      properties.append((label, keyPath, property))
+     }
+     return true
+    }
   }
 
   return ModuleContext(
@@ -237,20 +250,24 @@ public extension Module {
  }
 
  consuming func prepareContext(
-  from index: consuming ModuleIndex,
-  actor: consuming some StateActor
+  from index: ModuleIndex,
+  actor: some StateActor
  ) {
   let context = actor.context
   var properties = DynamicProperties()
 
-  _forEachFieldWithKeyPath(of: Self.self) { char, keyPath in
-   let label = String(cString: char)
-   if
-    label.hasPrefix("_"),
-    let property = self[keyPath: keyPath] as? any DynamicProperty {
-    properties.append((label, keyPath, property))
-   }
-   return true
+  if !index.element.isClassType {
+   ReflectionMirror._forEachFieldWithKeyPath(
+    of: Self.self,options: .ignoreUnknown
+    ) { char, keyPath in
+     let label = String(cString: char)
+     if
+      label.hasPrefix("_"),
+      let property = self[keyPath: keyPath] as? any DynamicProperty {
+      properties.append((label, keyPath, property))
+     }
+     return true
+    }
   }
 
   context.index = index
@@ -268,13 +285,12 @@ public extension ContextualProperty {
   keyPath: AnyKeyPath
  ) {
   var copy = self
-  
   if copy.context == .unknown {
    copy.context = context
   }
-  
+
   copy.update()
-  
+
   let writableKeyPath = keyPath as! WritableKeyPath<Root, Self>
   value[keyPath: writableKeyPath] = copy
  }
@@ -290,7 +306,7 @@ public extension DynamicProperty {
  ) {
   var copy = self
   copy.update()
-  
+
   let writableKeyPath = keyPath as! WritableKeyPath<Root, Self>
   value[keyPath: writableKeyPath] = copy
  }
@@ -301,12 +317,12 @@ public extension DynamicProperty {
 public extension Module {
  mutating func assign(to context: ModuleContext) {
   defer { context.properties = nil }
-  
+
   if let properties = context.properties {
    for (_, keyPath, property) in properties {
     if let property = property as? any ContextualProperty {
      property.set(on: &self, with: context, keyPath: keyPath)
-    } 
+    }
     else {
      property.set(on: &self, with: context, keyPath: keyPath)
     }
