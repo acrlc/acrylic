@@ -82,10 +82,16 @@ ContextProperty<Value: Sendable>: @unchecked Sendable, ContextualProperty {
  public subscript<A>(
   dynamicMember keyPath: WritableKeyPath<Value, A>
  ) -> ContextProperty<A> {
-  get { .constant(wrappedValue[keyPath: keyPath]) }
-  nonmutating set {
-   wrappedValue[keyPath: keyPath] = newValue.wrappedValue
+  var binding = ContextProperty<A>()
+  binding.id = self.id
+  binding.context = self.context
+  binding.get = { _ in
+   self.wrappedValue[keyPath: keyPath]
   }
+  binding.set = { _, newValue in
+   self.wrappedValue[keyPath: keyPath] = newValue
+  }
+  return binding
  }
 
  public init(
@@ -270,7 +276,7 @@ import OpenCombine
 @MainActor
 public extension ContextProperty {
  @discardableResult
- func state<A>(
+ func updateState<A>(
   _ value: @escaping (inout Value) throws -> A
  ) rethrows -> A {
   defer { context.objectWillChange.send() }
@@ -278,7 +284,7 @@ public extension ContextProperty {
  }
 
  @discardableResult
- func callState<A>(
+ func callWithState<A>(
   _ value: @escaping (inout Value) throws -> A
  ) rethrows -> A {
   defer {
@@ -290,12 +296,12 @@ public extension ContextProperty {
   return try value(&wrappedValue)
  }
 
- func state(_ newValue: Value) {
-  wrappedValue = newValue
+ func updateState(_ newValue: Value) {
   context.objectWillChange.send()
+  wrappedValue = newValue
  }
 
- func callState(_ newValue: Value) {
+ func callWithState(_ newValue: Value) {
   wrappedValue = newValue
   Task {
    try await callAsFunction()
@@ -311,7 +317,7 @@ public extension ContextProperty {
 
 public extension ContextProperty {
  @inline(__always)
- func update(
+ func updateContext(
   _ newValue: @escaping @autoclosure () -> Value = ()
  ) async throws {
   wrappedValue = newValue()
@@ -366,7 +372,7 @@ extension ContextProperty {
 
 // MARK: - Pesistent Implementation
 #if canImport(Persistence)
-import Persistence
+@preconcurrency import Persistence
 
 @dynamicMemberLookup
 @propertyWrapper
@@ -375,10 +381,16 @@ public struct DefaultsContextProperty<Defaults, Key, Value>:
  public subscript<A>(
   dynamicMember keyPath: WritableKeyPath<Value, A>
  ) -> ContextProperty<A> {
-  get { .constant(wrappedValue[keyPath: keyPath]) }
-  nonmutating set {
-   wrappedValue[keyPath: keyPath] = newValue.wrappedValue
+  var binding = ContextProperty<A>()
+  binding.id = self.id
+  binding.context = self.context
+  binding.get = { _ in
+   self.wrappedValue[keyPath: keyPath]
   }
+  binding.set = { _, newValue in
+   self.wrappedValue[keyPath: keyPath] = newValue
+  }
+  return binding
  }
 
  @inline(__always)
@@ -435,10 +447,16 @@ public struct StandardDefaultsContextProperty<Defaults, Key, Value>:
  public subscript<A>(
   dynamicMember keyPath: WritableKeyPath<Value, A>
  ) -> ContextProperty<A> {
-  get { .constant(wrappedValue[keyPath: keyPath]) }
-  nonmutating set {
-   wrappedValue[keyPath: keyPath] = newValue.wrappedValue
+  var binding = ContextProperty<A>()
+  binding.id = self.id
+  binding.context = self.context
+  binding.get = { _ in
+   self.wrappedValue[keyPath: keyPath]
   }
+  binding.set = { _, newValue in
+   self.wrappedValue[keyPath: keyPath] = newValue
+  }
+  return binding
  }
 
  @inline(__always)
