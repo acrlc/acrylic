@@ -119,7 +119,7 @@ public extension Testable {
      }
 
      if let results = result as? [Sendable] {
-      result = results._validResults
+      result = _getValidResults(results)
       valid = results.filter { ($0 as? [Sendable])?.notEmpty ?? false }.isEmpty
      } else if result is () {
       valid = false

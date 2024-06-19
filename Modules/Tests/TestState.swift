@@ -100,7 +100,7 @@ extension Tasks {
    }
   }
 
-  guard queue.filter({ !$1.detached }).notEmpty else {
+  guard queue.values.contains(where: { !$0.detached }) else {
    return nil
   }
 
@@ -160,9 +160,9 @@ extension Tasks {
    }
 
    if let results = result as? [Sendable] {
-    result = results._validResults
+    result = _getValidResults(results)
     valid = results.filter { ($0 as? [Sendable])?.notEmpty ?? false }.isEmpty
-   } else if !result._isValid {
+   } else if !_isValidResult(result) {
     valid = false
    }
 

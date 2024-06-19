@@ -22,7 +22,7 @@ extension Benchmarks: TestProtocol, @unchecked Sendable {
       "\(time.description + .space, style: .boldDim)"
     )
 
-    let results = result.results._validResults
+    let results = _getValidResults(result.results)
 
     if results.notEmpty {
      print(
