@@ -119,7 +119,10 @@ extension Tasks {
    var results: [Int: Sendable] = .empty
 
    state.timer.fire()
-   for (key, task) in queue {
+   let (keys, tasks) = (queue.keys, queue.values)
+   for index in keys.indices {
+    let (key, task) = (keys[index], tasks[index])
+
     if task.detached {
      detached.append((key, Task { try await task.perform() }))
     }
@@ -250,21 +253,20 @@ public extension Reflection {
   _ module: A, key: Int
  ) async throws -> (Bool, TestState<A>) {
   guard let state = states[key] as? TestState<A> else {
-   let initialState = TestState<A>()
+   states.store(TestState<A>(), for: key)
    unowned var state: TestState<A> {
-    get { states[key].unsafelyUnwrapped as! TestState<A> }
+    get { states[key] as! TestState<A> }
     set { states[key] = newValue }
    }
 
-   state = initialState
-   initialState.bind([module])
+   state.bind([module])
 
-   let index = initialState.context.index
+   let index = state.context.index
 
-   index.element.prepareContext(from: index, actor: initialState)
-   try await initialState.update()
+   index.element.prepareContext(from: index, actor: state)
+   try await state.update()
 
-   return (false, initialState)
+   return (false, state)
   }
   return (true, state)
  }

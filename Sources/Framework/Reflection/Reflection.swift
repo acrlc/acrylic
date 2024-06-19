@@ -1,16 +1,17 @@
+import struct Core.KeyValueStorage
 @globalActor
 public actor Reflection:
  @unchecked Sendable, Identifiable, Equatable {
  public static let shared = Reflection()
+// public static var storage: UnsafeRawStorage = .empty
+ public static var keys: Set<Int> = .empty
  @_spi(ModuleReflection)
- public nonisolated(unsafe) var states: [Int: StateActor] = .empty
-
+ public var states: KeyValueStorage<StateActor> = .empty
+ 
+ /// The global accessor for module states.
  @_spi(ModuleReflection)
  @Reflection
- public static var states: [Int: StateActor] {
-  get { shared.states }
-  set { shared.states = newValue }
- }
+ public static var states: KeyValueStorage<StateActor> = .empty
 
  @_spi(ModuleReflection)
  public static func assumeIsolated<T>(
@@ -128,28 +129,27 @@ extension Reflection {
  ) -> B {
   let key = A._mangledName.hashValue
 
-  guard let state = states[key] as? B else {
-   let initialState: B = .unknown
+  guard let state = states[key] else {
+   states.store(B.unknown, for: key)
    var state: B {
-    get { states[key].unsafelyUnwrapped as! B }
+    get { states[unchecked: key] as! B }
     set { states[key] = newValue }
    }
 
    // store state so it can be referenced from `Reflection.states`
-   state = initialState
-   initialState.bind([A.shared])
+   state.bind([A.shared])
 
-   let index = initialState.context.index
+   let index = state.context.index
 
-   index.element.prepareContext(from: index, actor: initialState)
+   index.element.prepareContext(from: index, actor: state)
 
    Task {
-    try await initialState.update()
+    try await state.update()
    }
 
-   return initialState
+   return state
   }
-  return state
+  return state as! B
  }
 
  @usableFromInline
@@ -160,25 +160,24 @@ extension Reflection {
   let key = A._mangledName.hashValue
 
   guard let state = states[key] as? B else {
-   let initialState: B = .unknown
+   states.store(B.unknown, for: key)
    var state: B {
-    get { states[key].unsafelyUnwrapped as! B }
+    get { states[unchecked: key] as! B }
     set { states[key] = newValue }
    }
 
-   state = initialState
-   initialState.bind([A.shared])
+   state.bind([A.shared])
 
-   let index = initialState.context.index
+   let index = state.context.index
 
-   index.element.prepareContext(from: index, actor: initialState)
+   index.element.prepareContext(from: index, actor: state)
 
    Task { @Reflection in
-    try await initialState.update()
-    try await initialState.context.callTasks()
+    try await state.update()
+    try await state.context.callTasks()
    }
 
-   return initialState
+   return state
   }
   let context = state.context
 
@@ -218,21 +217,20 @@ extension Reflection {
   let key = (id.base as? Int) ?? id.hashValue
 
   guard let state = states[key] as? A else {
-   let initialState: A = .unknown
+   states.store(A.unknown, for: key)
    var state: A {
-    get { states[key].unsafelyUnwrapped as! A }
+    get { states[unchecked: key] as! A }
     set { states[key] = newValue }
    }
 
-   state = initialState
-   initialState.bind([module()])
+   state.bind([module()])
 
-   let index = initialState.context.index
+   let index = state.context.index
 
-   index.element.prepareContext(from: index, actor: initialState)
+   index.element.prepareContext(from: index, actor: state)
 
-   try await initialState.update()
-   return initialState
+   try await state.update()
+   return state
   }
   return state
  }
@@ -247,13 +245,12 @@ extension Reflection {
   let key = (id.base as? Int) ?? id.hashValue
 
   guard let state = states[key] as? A else {
-   let initialState: A = .unknown
+   states.store(A.unknown, for: key)
    var state: A {
-    get { states[key].unsafelyUnwrapped as! A }
+    get { states[unchecked: key] as! A }
     set { states[key] = newValue }
    }
 
-   state = initialState
    state.bind([module()])
 
    let index = state.context.index
@@ -275,13 +272,12 @@ extension Reflection {
   let key = (id.base as? Int) ?? id.hashValue
 
   guard let state = states[key] as? A else {
-   let initialState: A = .unknown
+   states.store(A.unknown, for: key)
    var state: A {
-    get { states[key].unsafelyUnwrapped as! A }
+    get { states[unchecked: key] as! A }
     set { states[key] = newValue }
    }
 
-   state = initialState
    state.bind([module()])
 
    let index = state.context.index
@@ -480,22 +476,23 @@ extension Reflection {
 // MARK: - Module Extensions
 @_spi(ModuleReflection)
 public extension Module {
+ @Reflection
  func contextInfo(_ id: AnyHashable? = nil) -> [String] {
   let key = id?.hashValue ?? __key
-  let states = Reflection.shared.states
 
-  guard let state = states[key] else {
+  guard let state = Reflection.states[key] else {
    return .empty
   }
 
   let context = state.context
-  let cache = context.cache
-
-  let contextInfo = "contexts: " + cache.count.description.readable
-  let reflectionInfo = "reflections: " + states.count.description.readable
+  let contexts = context.cache.values
+  
+  let contextInfo = "contexts: " + contexts.count.description.readable
+  let reflectionInfo = "reflections: " +
+   Reflection.states.count.description.readable
   let tasksInfo = "tasks: " +
-   cache.map {
-    let tasks = $0.1.tasks
+  contexts.map {
+    let tasks = $0.tasks
     return tasks.running.count + tasks.queue.count
    }
    .reduce(into: 0, +=).description.readable

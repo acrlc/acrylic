@@ -1,7 +1,8 @@
 import Foundation
-
 #if canImport(SwiftUI)
 @_exported import protocol SwiftUI.DynamicProperty
+#elseif canImport(TokamakCore)
+@_exported import protocol TokamakCore.DynamicProperty
 #else
 /// An interface for a stored variable that updates an external property of a
 /// module.
@@ -19,12 +20,12 @@ public protocol DynamicProperty {
 
 @available(iOS 13.0, macOS 10.15, tvOS 13.0, watchOS 6.0, *)
 public extension DynamicProperty {
+ @_disfavoredOverload
  /// Updates the underlying value of the stored value.
  /// This is called before updating to ensure it's structure has the most recent
  /// value.
  mutating func update() {}
 }
-
 #endif
 
 @_spi(ModuleReflection)
@@ -38,8 +39,10 @@ extension AnyKeyPath: @unchecked Sendable {}
 
 // MARK: - Context Properties
 public protocol ContextualProperty: Identifiable, DynamicProperty, Sendable {
- nonisolated(unsafe) var id: Int { @Sendable get set }
- nonisolated(unsafe) var context: ModuleContext { get set }
+ @preconcurrency
+ var id: Int { @Sendable get set }
+ @preconcurrency
+ var context: ModuleContext { get set }
 }
 
 // MARK: - ContextProperty
@@ -48,24 +51,26 @@ public protocol ContextualProperty: Identifiable, DynamicProperty, Sendable {
 public struct
 ContextProperty<Value: Sendable>: @unchecked Sendable, ContextualProperty {
  public var id = UUID().hashValue
+ public var offset: Int!
  public unowned var context: ModuleContext = .unknown {
-  willSet {
-   initialize(from: context, to: newValue)
+  didSet {
+   initialize(from: oldValue, to: context)
   }
  }
 
  @usableFromInline
  var get: (Self) -> Value = { `self` in
-  self.context.values.withReaderLock {
-   $0[self.id] as! Value
-  }
- }
-  
- @usableFromInline
- var set: (Self, Value) -> () = { `self`, newValue in
-  self.context.values.withWriterLockVoid { $0[self.id] = newValue }
+  self.context.values.withReaderLock { $0[unchecked: self.id, as: Value.self] }
  }
 
+ @usableFromInline
+ var set: (Self, Value) -> () = { `self`, newValue in
+  self.context.values.withWriterLockVoid {
+   $0[self.id, as: Value.self] = newValue
+  }
+ }
+
+ @_transparent
  public var wrappedValue: Value {
   get { get(self) }
   nonmutating set { set(self, newValue) }
@@ -117,10 +122,16 @@ ContextProperty<Value: Sendable>: @unchecked Sendable, ContextualProperty {
   self.init(
    get: { `self` in
     self.context.values.withReaderLock {
-     $0[self.id] as? Value ?? initialValue
+     $0[self.id, as: Value.self] ?? initialValue
     }
    }, set: { `self`, newValue in
-    self.context.values.withWriterLockVoid { $0[self.id] = newValue }
+    self.context.values.withWriterLockVoid {
+     if let offset = $0.offset(for: self.id) {
+      $0.updateValue(newValue, at: offset)
+     } else {
+      $0.store(newValue, for: self.id)
+     }
+    }
    }
   )
  }
@@ -148,10 +159,31 @@ ContextProperty<Value: Sendable>: @unchecked Sendable, ContextualProperty {
 }
 
 public extension ContextProperty {
+ @Reflection
  func update() {
-  Task { @Reflection in
-   guard context.state < .terminal else { return }
-   try await context.update()
+  let state = context.state
+  // update context when terminal or not currently updating the context
+  guard state != .terminal else { return }
+  #if canImport(SwiftUI) || canImport(TokamakCore)
+  #if canImport(Combine) || canImport(OpenCombine)
+  // hold back state updates if context is active
+  if state < .active {
+   Task { @MainActor in
+    context.objectWillChange.send()
+   }
+  }
+  #endif
+  #endif
+  // update context if it's not the initial state
+  if state > .initial {
+   Task { @Reflection in
+    do { try await context.update() }
+    catch _ as CancellationError {
+     return
+    } catch {
+     fatalError(error.message)
+    }
+   }
   }
  }
 
@@ -164,16 +196,30 @@ public extension ContextProperty {
   )
 
   let id = id
-  if let value = oldContext.values.withReaderLock({ $0[id] }) {
+  if let value = oldContext.values.withReaderLock({ $0[id, as: Value.self] }) {
    oldContext.values.withWriterLockVoid {
-    $0.removeValue(forKey: id)
+    $0.removeValue(for: self.id)
     newContext.values.withWriterLockVoid {
-     $0[id] = value
+     self.offset = $0.store(value, for: self.id)
     }
    }
   } else {
+   let initialValue = get(self)
    newContext.values.withWriterLockVoid {
-    $0[id] = get(self)
+    self.offset = $0.store(initialValue, for: self.id)
+   }
+  }
+
+  // update to offset bindings realizing the offset
+  self.get = { `self` in
+   self.context.values.withReaderLock {
+    $0.uncheckedValue(at: self.offset, as: Value.self)
+   }
+  }
+
+  self.set = { `self`, newValue in
+   self.context.values.withWriterLockVoid {
+    $0.updateValue(newValue, at: self.offset)
    }
   }
  }
@@ -212,7 +258,7 @@ public extension ContextProperty {
  }
 }
 
-#if canImport(SwiftUI) || canImport(TokamakDOM)
+#if canImport(SwiftUI) || canImport(TokamakCore)
 #if canImport(Combine)
 import Combine
 #elseif canImport(OpenCombine)

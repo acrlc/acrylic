@@ -1,6 +1,5 @@
 import Collections
 import Extensions
-import OrderedCollections
 
 public protocol AsyncOperator: Actor {
  associatedtype DefaultTask: AsyncOperation
@@ -74,21 +73,25 @@ public actor Tasks:
  @unchecked Sendable, AsyncOperator, Operational, ExpressibleAsEmpty {
  public static let shared = Tasks()
  public nonisolated static var empty: Self { Self() }
+ public nonisolated var isEmpty: Bool { queue.keys.isEmpty }
 
  public typealias DefaultTask = AsyncTask<Sendable, any Error>
- public typealias Queue = OrderedDictionary<Int, DefaultTask>
  public typealias Running = Deque<(Int, any Operational)>
  public typealias Detached = Deque<(Int, any Operational)>
 
  @_spi(ModuleReflection)
- public nonisolated(unsafe) var queue: Queue = .empty
+ nonisolated
+ public lazy var queue: Queue = .empty
  @_spi(ModuleReflection)
- public nonisolated(unsafe) var running: Running = .empty
+ nonisolated
+ public lazy var running: Running = .empty
  @_spi(ModuleReflection)
- public nonisolated(unsafe) var detached: Detached = .empty
+ nonisolated
+ public lazy var detached: Detached = .empty
 
  @_spi(ModuleReflection)
- public nonisolated(unsafe) subscript(queue key: Int) -> DefaultTask? {
+ nonisolated
+ public subscript(queue key: Int) -> DefaultTask? {
   get { queue[key] }
   set { queue[key] = newValue }
  }
@@ -115,7 +118,7 @@ public actor Tasks:
   while detached.notEmpty {
    detached.popLast()?.1.cancel()
   }
-  queue = .empty
+  queue.empty()
  }
 
  public func invalidate() async {
@@ -126,7 +129,7 @@ public actor Tasks:
    while detached.notEmpty {
     detached.popLast()?.1.cancel()
    }
-   queue = .empty
+   queue.empty()
   }
  }
 
@@ -193,7 +196,10 @@ public actor Tasks:
  }
 
  public func callAsFunction() async throws {
-  for (key, task) in queue {
+  let (keys, tasks) = (queue.keys, queue.values)
+  for index in keys.indices {
+   let (key, task) = (keys[index], tasks[index])
+
    if task.detached {
     detached.append(
      (key, Task.detached(priority: task.priority, operation: task.perform))
@@ -228,7 +234,7 @@ public actor Tasks:
  ) async rethrows -> T {
   try body()
  }
- 
+
  @_spi(ModuleReflection)
  @discardableResult
  public static func detached<T: Sendable>(
@@ -245,7 +251,7 @@ public actor Tasks:
    }
   }
  }
- 
+
  @_spi(ModuleReflection)
  @discardableResult
  public static func detached<T: Sendable>(
@@ -257,7 +263,7 @@ public actor Tasks:
    try onResult(body())
   }
  }
- 
+
  @_spi(ModuleReflection)
  @discardableResult
  public static func detached<T: Sendable>(
@@ -274,7 +280,7 @@ public actor Tasks:
    return nil
   }
  }
- 
+
  @_spi(ModuleReflection)
  @discardableResult
  public static func detached<T: Sendable>(
@@ -287,23 +293,24 @@ public actor Tasks:
 
 extension Tasks: Collection {
  public nonisolated subscript(position: Int) -> (key: Int, value: DefaultTask) {
-  queue.elements[position]
+  (queue.keys[position], queue.values[position])
  }
 
- public nonisolated subscript(bounds: Range<Int>) -> Queue.Elements
-  .SubSequence {
-  queue.elements[bounds]
+ public nonisolated
+ subscript(bounds: Range<Int>) -> [(key: Int, value: DefaultTask)].SubSequence {
+  let (keys, tasks) = (queue.keys, queue.values)
+  return keys.indices.map { (keys[$0], tasks[$0]) }[bounds]
  }
 
  public nonisolated var count: Int { queue.count }
 
- public nonisolated var indices: Range<Int> { queue.elements.indices }
+ public nonisolated var indices: Range<Int> { queue.keys.indices }
  public nonisolated func index(after i: Int) -> Int {
-  queue.elements.index(after: i)
+  queue.keys.index(after: i)
  }
 
- public nonisolated var startIndex: Int { queue.elements.startIndex }
- public nonisolated var endIndex: Int { queue.elements.endIndex }
+ public nonisolated var startIndex: Int { queue.keys.startIndex }
+ public nonisolated var endIndex: Int { queue.keys.endIndex }
 
  public nonisolated func makeIterator() -> Iterator { Iterator(tasks: self) }
  public struct Iterator: IteratorProtocol {
@@ -311,9 +318,9 @@ extension Tasks: Collection {
   var position: Int = .zero
 
   public mutating func next() -> (key: Int, value: DefaultTask)? {
-   if position < tasks.queue.elements.endIndex {
+   if position < tasks.queue.keys.endIndex {
     defer { position += 1 }
-    return tasks.queue.elements[position]
+    return (tasks.queue.keys[position], tasks.queue.values[position])
    }
    return nil
   }
@@ -331,12 +338,10 @@ extension Tasks: AsyncSequence {
 
   /// Performs and returns the (key, task) for processing
   public mutating func next() async throws -> (key: Int, value: DefaultTask)? {
-   if position < tasks.queue.elements.endIndex {
+   if position < tasks.queue.keys.endIndex {
     defer { position += 1 }
 
-    let element = tasks.queue.elements[position]
-    let key = element.key
-    let task = element.value
+    let (key, task) = (tasks.queue.keys[position], tasks.queue.values[position])
 
     if task.detached {
      tasks.detached.append(
@@ -348,10 +353,170 @@ extension Tasks: AsyncSequence {
 
      try await task.wait()
     }
-    return element
+    return (key, task)
    }
    return nil
   }
+ }
+}
+
+// MARK: - Tasks Queue
+public extension Tasks {
+ struct Queue: @unchecked Sendable {
+  var _keys: [Int] = .empty
+  var _keysOffset: Int = .zero
+  var _offsets: [Int] = .empty
+  var _values: [DefaultTask] = .empty
+  var _valuesOffset: Int = .zero
+
+  public init() {}
+
+  // MARK: Subscript Operations
+  @inline(__always)
+  public subscript(unchecked key: Int) -> DefaultTask {
+   get {
+    _values[uncheckedOffset(for: key)]
+   }
+   set {
+    updateValue(newValue, for: key)
+   }
+  }
+
+  @inline(__always)
+  public subscript(key: Int) -> DefaultTask? {
+   get {
+    guard !_keys.isEmpty else { return nil }
+    var offset = 0
+    while offset < _keysOffset {
+     guard _keys[offset] == key else {
+      offset += 1
+      continue
+     }
+     return _values[offset]
+    }
+    return nil
+   }
+   set {
+    guard let newValue else { return }
+    guard contains(key) else {
+     store(newValue, for: key)
+     return
+    }
+    updateValue(newValue, for: key)
+   }
+  }
+
+  // MARK: Key Operations
+  @inline(__always)
+  @discardableResult
+  public mutating func store(_ value: DefaultTask, for key: Int) -> Int {
+   let oldOffset = _valuesOffset
+   let newOffset = oldOffset + 1
+   let keysOffset = _keysOffset
+   let newKeysOffset = keysOffset + 1
+   _values.append(value)
+   _valuesOffset = newOffset
+   _keys.append(key)
+   _keysOffset = newKeysOffset
+   _offsets.append(oldOffset)
+   return keysOffset
+  }
+
+  @inline(__always)
+  public mutating func updateValue(_ newValue: DefaultTask, for key: Int) {
+   _values[uncheckedOffset(for: key)] = newValue
+  }
+
+  @inline(__always)
+  public mutating func removeValue(for key: Int) {
+   guard !_keys.isEmpty else { return }
+   var offset = 0
+   while offset < _keysOffset {
+    guard _keys[offset] == key else {
+     offset += 1
+     continue
+    }
+    _keys.remove(at: offset)
+    _keysOffset -= 1
+    _offsets.remove(at: offset)
+    _values.remove(at: offset)
+    _valuesOffset -= 1
+    return
+   }
+  }
+
+  @inline(__always)
+  public func contains(_ key: Int) -> Bool {
+   guard !_keys.isEmpty else { return false }
+   var offset = 0
+   while offset < _keysOffset {
+    guard _keys[offset] == key else {
+     offset += 1
+     continue
+    }
+    return true
+   }
+   return false
+  }
+
+  @inline(__always)
+  func uncheckedOffset(for key: Int) -> Int {
+   var offset = 0
+   while offset < _keysOffset {
+    guard _keys[offset] == key else {
+     offset += 1
+     continue
+    }
+    return _offsets[offset]
+   }
+   fatalError("No value was stored for key: '\(key)'")
+  }
+ }
+}
+
+// MARK: Unkeyed Operations
+public extension Tasks.Queue {
+ // MARK: Sequence Properties
+ static var empty: Self { Self() }
+ @inline(__always)
+ var isEmpty: Bool {
+  _valuesOffset == .zero
+ }
+
+ @inline(__always)
+ var notEmpty: Bool {
+  _valuesOffset > .zero
+ }
+
+ var keys: [Int] { _keys }
+ var values: [Tasks.DefaultTask] { _values }
+ var count: Int { _valuesOffset }
+
+ // MARK: Sequence Operations
+ @inline(__always)
+ func uncheckedValue(at offset: Int) -> Tasks.DefaultTask {
+  _values[offset]
+ }
+
+ @inline(__always)
+ mutating func updateValue(_ newValue: Tasks.DefaultTask, at offset: Int) {
+  _values[offset] = newValue
+ }
+
+ mutating func removeValue(at offset: Int) {
+  _keys.remove(at: offset)
+  _keysOffset -= 1
+  _offsets.remove(at: offset)
+  _values.remove(at: offset)
+  _valuesOffset -= 1
+ }
+
+ @inline(__always)
+ mutating func empty() {
+  _keys = .empty
+  _keysOffset = .zero
+  _values = .empty
+  _valuesOffset = .zero
  }
 }
 
@@ -394,57 +559,30 @@ public extension Task where Failure == Never {
 }
 
 // MARK: Helper Extensions
-@_spi(ModuleReflection)
-public extension Sendable {
- var _isValid: Bool {
-  !(
-   self is () || self is [()] || self is [[()]] ||
-    self is ()? || self is [()]? || self is [[()]]?
-  )
- }
-}
-
-@_spi(ModuleReflection)
-public extension [Sendable] {
- var _validResults: Self {
-  compactMap { result in
-   if let array = result as? Self {
-    array._validResults
-   } else {
-    result._isValid ? result : nil
-   }
-  }
- }
-}
-
-@_spi(ModuleReflection)
-public extension [Any] {
- var _validResults: Self {
-  func _isValid(_ self: Any) -> Bool {
-   !(
-    self is () || self is [()] || self is [[()]] ||
-     self is ()? || self is [()]? || self is [[()]]?
-   )
-  }
-
-  return compactMap { result in
-   if let array = result as? Self {
-    array._validResults
-   } else {
-    _isValid(result) ? result : nil
-   }
-  }
- }
-}
-
-extension OrderedDictionary: ExpressibleAsEmpty {
- public static var empty: Self { Self() }
- @inline(__always)
- public var notEmpty: Bool { !isEmpty }
-}
-
 extension Deque: ExpressibleAsEmpty {
  public static var empty: Self { Self() }
  @inline(__always)
  public var notEmpty: Bool { !isEmpty }
+}
+
+// MARK: Helper Functions
+@_spi(ModuleReflection)
+@inline(__always)
+public func _isValidResult(_ self: Any) -> Bool {
+ !(
+  self is () || self is [()] || self is [[()]] ||
+   self is ()? || self is [()]? || self is [[()]]?
+ )
+}
+
+@_spi(ModuleReflection)
+@inline(__always)
+public func _getValidResults(_ self: [Sendable]) -> [Sendable] {
+ self.compactMap { result in
+  if let array = result as? [Sendable] {
+   _getValidResults(array)
+  } else {
+   _isValidResult(result) ? result : nil
+  }
+ }
 }

@@ -9,9 +9,9 @@ open class ModuleContext:
  @_spi(ModuleReflection)
  public typealias Indices = ModuleIndex.Indices
 
- public enum State: UInt8, @unchecked Sendable, Comparable {
-  case active, idle, terminal, initial
-  
+ public enum State: UInt8, Sendable, Comparable, Equatable {
+  case terminal, initial, idle, active
+
   public static func < (
    lhs: ModuleContext.State, rhs: ModuleContext.State
   ) -> Bool {
@@ -26,7 +26,7 @@ open class ModuleContext:
  public var actor: StateActor!
  public var tasks: Tasks = .empty
  @_spi(ModuleReflection)
- public var cache = [Int: ModuleContext]()
+ public var cache: KeyValueStorage<ModuleContext> = .empty
 
  @_spi(ModuleReflection)
  public var index: ModuleIndex = .start
@@ -35,7 +35,7 @@ open class ModuleContext:
  @_spi(ModuleReflection)
  public var indices: Indices = .empty
  @_spi(ModuleReflection)
- public var values = ReadWriteLockedValue<[Int: Any]>(.empty)
+ public var values = ReadWriteLockedValue<AnyKeyValueStorage>(.empty)
 
  /// - Note: Results feature not implemented but may return in some form
  ///
@@ -64,7 +64,7 @@ open class ModuleContext:
  }
 
  @_spi(ModuleReflection)
- public nonisolated(unsafe) init() {}
+ public nonisolated init() {}
  deinit { self.cancel() }
 }
 
@@ -83,8 +83,8 @@ public extension ModuleContext {
  func callTasks() async throws {
   try await tasks()
 
-  for index in indices[1...] {
-   try await cache[index.key]?.tasks()
+  for context in cache.values {
+   try await context.tasks()
   }
  }
 
