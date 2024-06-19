@@ -1,4 +1,4 @@
-#if canImport(SwiftUI) || canImport(TokamakDOM)
+#if canImport(SwiftUI) || canImport(TokamakCore)
 #if canImport(Combine)
 import Combine
 #elseif canImport(OpenCombine)
@@ -9,9 +9,8 @@ import OpenCombine
 
 #if os(WASI)
 import TokamakCore
-import TokamakDOM
 extension ModuleContext: OpenCombine.ObservableObject {}
-#elseif canImport(SwiftUI)
+#else
 import SwiftUI
 extension ModuleContext: Combine.ObservableObject {}
 #endif
@@ -33,7 +32,7 @@ public struct _DynamicContextBindingProperty
   }
  }
 
- #if os(macOS) || os(iOS)
+ #if canImport(SwiftUI)
  public var animation: Animation?
  @inline(__always)
  public var projectedValue: Binding<Value> {
@@ -61,7 +60,7 @@ public struct _ObservedContextAliasProperty
  @usableFromInline
  let keyPath: WritableKeyPath<A, Value>
 
- #if canImport(SwiftUI) || canImport(TokamakDOM)
+ #if canImport(SwiftUI) || canImport(TokamakCore)
  @ObservedObject
  public var context: ModuleContext = .unknown
  #else
@@ -81,7 +80,7 @@ public struct _ObservedContextAliasProperty
  }
 
  // FIXME: context properties to update context here (from projectedValue)
- #if os(macOS) || os(iOS)
+ #if canImport(SwiftUI)
  var animation: Animation?
  public var projectedValue: Binding<Value> {
   if let animation {
@@ -101,6 +100,14 @@ public struct _ObservedContextAliasProperty
  #endif
 }
 
+#if os(WASI)
+extension _ObservedContextAliasProperty: ObservedProperty {
+ public var objectWillChange: AnyPublisher<(), Never> {
+  context.objectWillChange.map { _ in }.eraseToAnyPublisher()
+ }
+}
+#endif
+
 @Reflection(unsafe)
 public extension _ObservedContextAliasProperty {
  init(
@@ -118,7 +125,7 @@ public extension _ObservedContextAliasProperty {
   let module = Reflection.states[id]!.context.index.element as! A
   let wrapper = module[keyPath: keyPath]
 
-  _context = .init(wrappedValue: wrapper.context)
+  _context = ObservedObject(wrappedValue: wrapper.context)
   id = wrapper.id
  }
 
@@ -135,14 +142,14 @@ public extension _ObservedContextAliasProperty {
   let module = Reflection.states[id]!.context.index.element as! A
   let wrapper = module[keyPath: keyPath]
 
-  _context = .init(wrappedValue: wrapper.context)
+  _context = ObservedObject(wrappedValue: wrapper.context)
   id = wrapper.id
  }
 
  @_disfavoredOverload
  init(_ keyPath: WritableKeyPath<A, Value>, _ call: Bool = false) {
   self.keyPath = keyPath
-  _context = .init(
+  _context = ObservedObject(
    wrappedValue:
    Reflection.cacheOrCall(
     id: A._mangledName,
@@ -156,7 +163,7 @@ public extension _ObservedContextAliasProperty {
  @_disfavoredOverload
  init(_ type: A.Type, _ call: Bool = false) where Value == A {
   keyPath = \A.self
-  _context = .init(
+  _context = ObservedObject(
    wrappedValue:
    Reflection.cacheOrCall(
     id: A._mangledName,
@@ -167,7 +174,7 @@ public extension _ObservedContextAliasProperty {
   )
  }
 
- #if os(macOS) || os(iOS)
+ #if canImport(SwiftUI)
  init(
   wrappedValue: Value,
   _ keyPath: KeyPath<A, ContextProperty<Value>>, _ call: Bool = false,
@@ -184,7 +191,7 @@ public extension _ObservedContextAliasProperty {
   let module = Reflection.states[id]!.context.index.element as! A
   let wrapper = module[keyPath: keyPath]
 
-  _context = .init(wrappedValue: wrapper.context)
+  _context = ObservedObject(wrappedValue: wrapper.context)
   id = wrapper.id
  }
 
@@ -204,7 +211,7 @@ public extension _ObservedContextAliasProperty {
   let module = Reflection.states[id]!.context.index.element as! A
   let wrapper = module[keyPath: keyPath]
 
-  _context = .init(wrappedValue: wrapper.context)
+  _context = ObservedObject(wrappedValue: wrapper.context)
   id = wrapper.id
  }
 
@@ -215,7 +222,7 @@ public extension _ObservedContextAliasProperty {
   animation: Animation
  ) {
   self.keyPath = keyPath
-  _context = .init(
+  _context = ObservedObject(
    wrappedValue:
    Reflection.cacheOrCall(
     id: A._mangledName,
@@ -231,7 +238,7 @@ public extension _ObservedContextAliasProperty {
  init(_ type: A.Type, _ call: Bool = false, animation: Animation)
   where Value == A {
   keyPath = \A.self
-  _context = .init(
+  _context = ObservedObject(
    wrappedValue:
    Reflection.cacheOrCall(
     id: A._mangledName,
@@ -281,6 +288,7 @@ public extension Scene {
   where A: ObservableModule
 }
 
+#if canImport(SwiftUI)
 public extension Commands {
  typealias Alias<A, Value> = _StaticModuleAliasProperty<A, Value>
   where A: StaticModule
@@ -294,6 +302,7 @@ public extension ToolbarContent {
  typealias ObservedAlias<A, Value> = _ObservedModuleAliasProperty<A, Value>
   where A: ObservableModule
 }
+#endif
 
 /* MARK: - Observable Properties */
 @propertyWrapper
@@ -305,22 +314,32 @@ public struct _ObservedModuleAliasProperty
 
  @usableFromInline
  let keyPath: WritableKeyPath<A, Value>
-
- #if canImport(SwiftUI) || canImport(TokamakDOM)
- @StateObject
+ #if canImport(SwiftUI) || canImport(TokamakCore)
+ @ObservedObject
  var module: A = .shared
- #else
- unowned var module: A = .shared
- #endif
-
- @inlinable
  public var wrappedValue: Value {
-  nonmutating get { A.shared[keyPath: keyPath] }
-  nonmutating set { A.shared[keyPath: keyPath] = newValue }
+  nonmutating get {
+   module[keyPath: keyPath]
+  }
+  nonmutating set {
+   A.shared[keyPath: keyPath] = newValue
+  }
+ }
+ #else
+ @usableFromInline
+ var module: A {
+  nonmutating get { context.index.element as! A }
+  nonmutating set { context.index.element = newValue }
  }
 
+ public var wrappedValue: Value {
+  nonmutating get { module[keyPath: keyPath] }
+  nonmutating set { module[keyPath: keyPath] = newValue }
+ }
+ #endif
+
  // FIXME: context properties to update context here (from projectedValue)
- #if canImport(SwiftUI) || canImport(TokamakDOM)
+ #if canImport(SwiftUI)
  var animation: Animation?
  public var projectedValue: Binding<Value> {
   if let animation {
@@ -456,14 +475,13 @@ public extension _ObservedModuleAliasProperty {
   ).context
   self.animation = animation
  }
-
  #endif
 }
 
-#if os(WASI) && canImport(TokamakDOM)
+#if os(WASI)
 extension _ObservedModuleAliasProperty: ObservedProperty {
  public var objectWillChange: AnyPublisher<(), Never> {
-  context.objectWillChange.map { _ in }.eraseToAnyPublisher()
+  A.shared.objectWillChange.map { _ in }.eraseToAnyPublisher()
  }
 }
 #endif
@@ -477,27 +495,35 @@ public struct _StaticObservedModuleAliasProperty
  @usableFromInline
  let keyPath: WritableKeyPath<A, Value>
 
- #if canImport(SwiftUI) || canImport(TokamakDOM)
- @ObservedObject
- public var context: ModuleContext = .unknown
- #else
- public unowned var context: ModuleContext = .unknown
- #endif
-
  @usableFromInline
  var module: A {
   nonmutating get { context.index.element as! A }
   nonmutating set { context.index.element = newValue }
  }
 
+ #if canImport(SwiftUI) || canImport(TokamakCore)
+ @ObservedObject
+ public var context: ModuleContext = .unknown
+
+ @inlinable
+ public var wrappedValue: Value {
+  nonmutating get { module[keyPath: keyPath] }
+  nonmutating set {
+   module[keyPath: keyPath] = newValue
+  }
+ }
+ #else
+ public unowned var context: ModuleContext = .unknown
+
  @inlinable
  public var wrappedValue: Value {
   nonmutating get { module[keyPath: keyPath] }
   nonmutating set { module[keyPath: keyPath] = newValue }
  }
+ #endif
 
  // FIXME: context properties to update context here (from projectedValue)
- #if os(macOS) || os(iOS)
+ #if canImport(SwiftUI)
  var animation: Animation?
  public var projectedValue: Binding<Value> {
   if let animation {
@@ -523,7 +549,6 @@ public extension _StaticObservedModuleAliasProperty {
   wrappedValue: Value,
   _ keyPath: KeyPath<A, ContextProperty<Value>>, _ call: Bool = false
  ) {
-  assert(!(A.self is AnyObject.Type), "class modules aren't supported")
   self.keyPath = keyPath.appending(path: \.wrappedValue)
   Reflection.cacheOrCall(
    moduleType: A.self,
@@ -531,7 +556,7 @@ public extension _StaticObservedModuleAliasProperty {
    call: call
   )
   let wrapper = A.shared[keyPath: keyPath]
-  _context = .init(
+  _context = ObservedObject(
    wrappedValue:
    wrapper.context
   )
@@ -539,7 +564,6 @@ public extension _StaticObservedModuleAliasProperty {
  }
 
  init(_ keyPath: KeyPath<A, ContextProperty<Value>>, _ call: Bool = false) {
-  assert(!(A.self is AnyObject.Type), "class modules aren't supported")
   Reflection.cacheOrCall(
    moduleType: A.self,
    stateType: ModuleState.self,
@@ -547,7 +571,7 @@ public extension _StaticObservedModuleAliasProperty {
   )
   self.keyPath = keyPath.appending(path: \.wrappedValue)
   let wrapper = A.shared[keyPath: keyPath]
-  _context = .init(
+  _context = ObservedObject(
    wrappedValue:
    wrapper.context
   )
@@ -556,9 +580,8 @@ public extension _StaticObservedModuleAliasProperty {
 
  @_disfavoredOverload
  init(_ keyPath: WritableKeyPath<A, Value>, _ call: Bool = false) {
-  assert(!(A.self is AnyObject.Type), "class modules aren't supported")
   self.keyPath = keyPath
-  _context = .init(
+  _context = ObservedObject(
    wrappedValue:
    Reflection.cacheOrCall(
     moduleType: A.self,
@@ -570,9 +593,8 @@ public extension _StaticObservedModuleAliasProperty {
 
  @_disfavoredOverload
  init(_ type: A.Type, _ call: Bool = false) where Value == A {
-  assert(!(A.self is AnyObject.Type), "class modules aren't supported")
   keyPath = \A.self
-  _context = .init(
+  _context = ObservedObject(
    wrappedValue:
    Reflection.cacheOrCall(
     moduleType: A.self,
@@ -582,13 +604,12 @@ public extension _StaticObservedModuleAliasProperty {
   )
  }
 
- #if os(macOS) || os(iOS)
+ #if canImport(SwiftUI)
  init(
   wrappedValue: Value,
   _ keyPath: KeyPath<A, ContextProperty<Value>>, _ call: Bool = false,
   animation: Animation
  ) {
-  assert(!(A.self is AnyObject.Type), "class modules aren't supported")
   self.keyPath = keyPath.appending(path: \.wrappedValue)
   Reflection.cacheOrCall(
    moduleType: A.self,
@@ -596,7 +617,7 @@ public extension _StaticObservedModuleAliasProperty {
    call: call
   )
   let wrapper = A.shared[keyPath: keyPath]
-  _context = .init(
+  _context = ObservedObject(
    wrappedValue:
    wrapper.context
   )
@@ -608,7 +629,6 @@ public extension _StaticObservedModuleAliasProperty {
   _ keyPath: KeyPath<A, ContextProperty<Value>>, _ call: Bool = false,
   animation: Animation
  ) {
-  assert(!(A.self is AnyObject.Type), "class modules aren't supported")
   Reflection.cacheOrCall(
    moduleType: A.self,
    stateType: ModuleState.self,
@@ -616,7 +636,7 @@ public extension _StaticObservedModuleAliasProperty {
   )
   self.keyPath = keyPath.appending(path: \.wrappedValue)
   let wrapper = A.shared[keyPath: keyPath]
-  _context = .init(
+  _context = ObservedObject(
    wrappedValue:
    wrapper.context
   )
@@ -630,9 +650,8 @@ public extension _StaticObservedModuleAliasProperty {
   _ call: Bool = false,
   animation: Animation
  ) {
-  assert(!(A.self is AnyObject.Type), "class modules aren't supported")
   self.keyPath = keyPath
-  _context = .init(
+  _context = ObservedObject(
    wrappedValue:
    Reflection.cacheOrCall(
     moduleType: A.self,
@@ -646,9 +665,8 @@ public extension _StaticObservedModuleAliasProperty {
  @_disfavoredOverload
  init(_ type: A.Type, _ call: Bool = false, animation: Animation)
   where Value == A {
-  assert(!(A.self is AnyObject.Type), "class modules aren't supported")
   keyPath = \A.self
-  _context = .init(
+  _context = ObservedObject(
    wrappedValue:
    Reflection.cacheOrCall(
     moduleType: A.self,
@@ -660,6 +678,14 @@ public extension _StaticObservedModuleAliasProperty {
  }
  #endif
 }
+
+#if os(WASI)
+extension _StaticObservedModuleAliasProperty: ObservedProperty {
+ public var objectWillChange: AnyPublisher<(), Never> {
+  context.objectWillChange.map { _ in }.eraseToAnyPublisher()
+ }
+}
+#endif
 #endif
 
 /* MARK: - Module Properties */
@@ -685,7 +711,7 @@ public struct _StaticModuleAliasProperty
   nonmutating set { module[keyPath: keyPath] = newValue }
  }
 
- #if os(macOS) || os(iOS)
+ #if canImport(SwiftUI)
  var animation: Animation?
  public var projectedValue: Binding<Value> {
   if let animation {
@@ -711,7 +737,6 @@ public extension _StaticModuleAliasProperty {
   wrappedValue: Value,
   _ keyPath: KeyPath<A, ContextProperty<Value>>, _ call: Bool = false
  ) {
-  assert(!(A.self is AnyObject.Type), "class modules aren't supported")
   self.keyPath = keyPath.appending(path: \.wrappedValue)
   Reflection.cacheOrCall(
    moduleType: A.self,
@@ -724,7 +749,6 @@ public extension _StaticModuleAliasProperty {
  }
 
  init(_ keyPath: KeyPath<A, ContextProperty<Value>>, _ call: Bool = false) {
-  assert(!(A.self is AnyObject.Type), "class modules aren't supported")
   Reflection.cacheOrCall(
    moduleType: A.self,
    stateType: ModuleState.self,
@@ -738,7 +762,6 @@ public extension _StaticModuleAliasProperty {
 
  @_disfavoredOverload
  init(_ keyPath: WritableKeyPath<A, Value>, _ call: Bool = false) {
-  assert(!(A.self is AnyObject.Type), "class modules aren't supported")
   self.keyPath = keyPath
   context = Reflection.cacheOrCall(
    moduleType: A.self,
@@ -749,7 +772,6 @@ public extension _StaticModuleAliasProperty {
 
  @_disfavoredOverload
  init(_ type: A.Type, _ call: Bool = false) where Value == A {
-  assert(!(A.self is AnyObject.Type), "class modules aren't supported")
   keyPath = \A.self
   context = Reflection.cacheOrCall(
    moduleType: A.self,
@@ -758,13 +780,12 @@ public extension _StaticModuleAliasProperty {
   ).context
  }
 
- #if os(macOS) || os(iOS)
+ #if canImport(SwiftUI)
  init(
   wrappedValue: Value,
   _ keyPath: KeyPath<A, ContextProperty<Value>>, _ call: Bool = false,
   animation: Animation
  ) {
-  assert(!(A.self is AnyObject.Type), "class modules aren't supported")
   self.keyPath = keyPath.appending(path: \.wrappedValue)
   Reflection.cacheOrCall(
    moduleType: A.self,
@@ -782,7 +803,6 @@ public extension _StaticModuleAliasProperty {
   _ call: Bool = false,
   animation: Animation
  ) {
-  assert(!(A.self is AnyObject.Type), "class modules aren't supported")
   Reflection.cacheOrCall(
    moduleType: A.self,
    stateType: ModuleState.self,
@@ -801,7 +821,6 @@ public extension _StaticModuleAliasProperty {
   _ call: Bool = false,
   animation: Animation
  ) {
-  assert(!(A.self is AnyObject.Type), "class modules aren't supported")
   self.keyPath = keyPath
   context = Reflection.cacheOrCall(
    moduleType: A.self,
@@ -814,7 +833,6 @@ public extension _StaticModuleAliasProperty {
  @_disfavoredOverload
  init(_ type: A.Type, _ call: Bool = false, animation: Animation)
   where Value == A {
-  assert(!(A.self is AnyObject.Type), "class modules aren't supported")
   keyPath = \A.self
   context = Reflection.cacheOrCall(
    moduleType: A.self,
@@ -851,7 +869,7 @@ public struct _ContextAliasProperty
  }
 
  // FIXME: context properties to update context here (from projectedValue)
- #if os(macOS) || os(iOS)
+ #if canImport(SwiftUI)
  var animation: Animation?
  public var projectedValue: Binding<Value> {
   if let animation {
@@ -931,7 +949,7 @@ public extension _ContextAliasProperty {
   ).context
  }
 
- #if os(macOS) || os(iOS)
+ #if canImport(SwiftUI)
  init(
   wrappedValue: Value,
   _ keyPath: KeyPath<A, ContextProperty<Value>>, _ call: Bool = false,
