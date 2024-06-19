@@ -14,10 +14,10 @@ let package = Package(
   .executable(name: "acrylicTests", targets: ["AcrylicTests"])
  ],
  dependencies: [
-  .package(url: "https://github.com/acrlc/Core.git", from: "0.1.2"),
+  .package(url: "https://github.com/acrlc/Core.git", branch: "main"),
   .package(
-   url: "https://github.com/philipturner/swift-reflection-mirror.git",
-   from: "0.0.1"
+   url: "https://github.com/acrlc/swift-reflection-mirror.git",
+   branch: "wasm-compatible"
   ),
   .package(
    url: "https://github.com/apple/swift-collections.git", from: "1.1.0"
@@ -91,7 +91,6 @@ if useLibraryEvolution {
  }
 }
 
-#if arch(wasm32)
 package.dependencies.append(
  .package(url: "https://github.com/acrlc/tokamak.git", branch: "main")
 )
@@ -106,7 +105,6 @@ for target in package.targets {
   break
  }
 }
-#endif
 
 if lint {
  package.dependencies.append(
@@ -128,9 +126,9 @@ if lint {
   if target.swiftSettings == nil {
    target.swiftSettings = []
   }
-  
+
   target.swiftSettings? += [
    .enableExperimentalFeature("StrictConcurrency"))
   ]
  }
-*/
+ */
