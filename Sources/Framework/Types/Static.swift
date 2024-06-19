@@ -208,11 +208,11 @@ public extension StaticModule {
  }
 }
 
-#elseif os(WASI) && canImport(TokamakDOM) && canImport(OpenCombine)
+#elseif os(WASI) && canImport(TokamakCore) && canImport(OpenCombine)
 import OpenCombine
 
 @Reflection(unsafe)
-extension StaticModule {
+public extension StaticModule {
  var contextWillChange: ModuleContext.ObjectWillChangePublisher {
   Self.context.objectWillChange
  }

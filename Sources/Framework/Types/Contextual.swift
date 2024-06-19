@@ -197,7 +197,7 @@ public extension ContextModule {
   return try await action(Self.context)
  }
 
-#if canImport(Combine) && canImport(SwiftUI)
+ #if canImport(Combine) && canImport(SwiftUI)
  @MainActor
  @discardableResult
  func state<A>(
@@ -212,7 +212,7 @@ public extension ContextModule {
   defer { context.objectWillChange.send() }
   return try action(&module)
  }
- 
+
  @discardableResult
  mutating func stateWithContext<A>(
   action: @Reflection @escaping (inout Self) throws -> A
@@ -252,11 +252,11 @@ public extension ContextModule {
  }
 }
 
-#elseif os(WASI) && canImport(TokamakDOM) && canImport(OpenCombine)
+#elseif os(WASI) && canImport(TokamakCore) && canImport(OpenCombine)
 import OpenCombine
 
 @Reflection(unsafe)
-extension StaticModule {
+public extension ContextModule {
  var contextWillChange: ModuleContext.ObjectWillChangePublisher {
   Self.context.objectWillChange
  }
