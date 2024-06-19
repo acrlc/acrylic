@@ -3,7 +3,6 @@ import struct Core.KeyValueStorage
 public actor Reflection:
  @unchecked Sendable, Identifiable, Equatable {
  public static let shared = Reflection()
-// public static var storage: UnsafeRawStorage = .empty
  public static var keys: Set<Int> = .empty
  @_spi(ModuleReflection)
  public var states: KeyValueStorage<StateActor> = .empty
