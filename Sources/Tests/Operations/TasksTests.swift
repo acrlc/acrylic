@@ -79,7 +79,7 @@ struct TestTasks: Testable {
 
    try await tasks.waitForAll()
 
-   return try (results._validResults as? [Int]).throwing()
+   return try (_getValidResults(results) as? [Int]).throwing()
   } == [15]
 
   Identity("Waiting Tasks") {

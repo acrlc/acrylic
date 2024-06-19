@@ -4,7 +4,7 @@ import Configuration
 import Shell
 import Tests
 #if os(WASI)
-import TokamakDOM
+import TokamakCore
 #elseif canImport(SwiftUI)
 import SwiftUI
 #endif
@@ -167,6 +167,7 @@ struct AcrylicTests: TestsCommand {
   }
  }
 
+ @Reflection
  func onCompletion() async {
   print()
   notify(
@@ -176,7 +177,7 @@ struct AcrylicTests: TestsCommand {
   )
   #if os(WASI) || canImport(SwiftUI)
   // clear previous states / contexts
-  Reflection.shared.states.removeAll()
+  Reflection.states.empty()
   print()
 
   notify(
@@ -193,7 +194,7 @@ struct AcrylicTests: TestsCommand {
  }
 }
 
-nonisolated(unsafe) let notify = Configuration.default
+@preconcurrency let notify = Configuration.default
 
 #if os(WASI) || canImport(SwiftUI)
 @available(macOS 13, iOS 16, *)
