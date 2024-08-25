@@ -249,7 +249,7 @@ public extension Module {
   )
  }
 
- consuming func prepareContext(
+ func prepareContext(
   from index: ModuleIndex,
   actor: some StateActor
  ) {
