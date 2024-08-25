@@ -14,6 +14,11 @@ let package = Package(
   .executable(name: "acrylicTests", targets: ["AcrylicTests"])
  ],
  dependencies: [
+  
+  
+  
+  
+  
   .package(url: "https://github.com/acrlc/Core.git", branch: "main"),
   .package(
    url: "https://github.com/acrlc/swift-reflection-mirror.git",
@@ -91,8 +96,10 @@ if useLibraryEvolution {
  }
 }
 
+#if arch(wasm32)
 package.dependencies.append(
- .package(url: "https://github.com/acrlc/tokamak.git", branch: "main")
+// .package(url: "https://github.com/acrlc/tokamak.git", branch: "main")
+ .package(path: "../tokamak")
 )
 for target in package.targets {
  if target.name == "AcrylicTests" || target.name == "Acrylic" {
@@ -105,6 +112,7 @@ for target in package.targets {
   break
  }
 }
+#endif
 
 if lint {
  package.dependencies.append(
