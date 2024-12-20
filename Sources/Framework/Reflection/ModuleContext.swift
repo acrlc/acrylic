@@ -19,7 +19,6 @@ open class ModuleContext:
   }
  }
 
- @Reflection
  public var state: State = .initial
 
  @_spi(ModuleReflection)

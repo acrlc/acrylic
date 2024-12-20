@@ -46,76 +46,75 @@ public extension StaticModule {
  }
 }
 
-@Reflection(unsafe)
 public extension StaticModule {
  func callContext() async throws {
   try await Self.callContext()
  }
-
+ 
  func callContext(with state: ModuleContext.State) async throws {
   try await Self.callContext(with: state)
  }
-
+ 
  func cancelContext() async {
   await Self.cancelContext()
  }
-
+ 
  func cancelContext(with state: ModuleContext.State) async {
   await Self.cancelContext(with: state)
  }
-
+ 
  func updateContext() async throws {
   try await Self.updateContext()
  }
-
+ 
  func updateContext(with state: ModuleContext.State) async throws {
   try await Self.updateContext()
  }
-
+ 
  func waitForContext() async throws {
   try await Self.waitForContext()
  }
-
+ 
  func waitForAllOnContext() async throws {
   try await Self.waitForAllOnContext()
  }
-
+ 
  nonisolated func callContext() {
   Task {
    try await Self.callContext()
   }
  }
-
+ 
  nonisolated func callContext(with state: ModuleContext.State) {
   Task {
    try await Self.callContext(with: state)
   }
  }
-
+ 
  nonisolated func cancelContext() {
   Task {
    await Self.cancelContext()
   }
  }
-
+ 
  nonisolated func cancelContext(with state: ModuleContext.State) {
   Task {
    await Self.cancelContext(with: state)
   }
  }
-
+ 
  nonisolated func updateContext() {
   Task {
    try await Self.updateContext()
   }
  }
-
+ 
  nonisolated func updateContext(with state: ModuleContext.State) {
   Task {
    try await Self.updateContext(with: state)
   }
  }
-
+ 
  nonisolated func withContext(
   action: @Reflection @escaping (ModuleContext) async throws -> ()
  ) {
@@ -123,7 +122,7 @@ public extension StaticModule {
    try await action(Self.context)
   }
  }
-
+ 
  nonisolated func withContext(
   action: @Reflection @escaping (ModuleContext) throws -> ()
  ) rethrows {
@@ -131,14 +130,7 @@ public extension StaticModule {
    try action(Self.context)
   }
  }
-
- @discardableResult
- func withContext<A>(
-  action: @Reflection @escaping (ModuleContext) throws -> A
- ) rethrows -> A {
-  try action(Self.context)
- }
-
+ 
  @discardableResult
  nonisolated func withContext<A>(
   action: @Reflection @escaping (ModuleContext) async throws -> A
@@ -154,14 +146,6 @@ public extension StaticModule {
    return try await action(Self.context)
   }
  }
-
- func callWithContext(
-  action: @Reflection @escaping (ModuleContext) throws -> ()
- ) rethrows {
-  defer { self.callContext() }
-  try action(Self.context)
- }
-
  @discardableResult
  nonisolated func callWithContext<A>(
   action: @Reflection @escaping (ModuleContext) async throws -> A
@@ -180,13 +164,6 @@ public extension StaticModule {
   }
  }
 
- func callWithContext(
-  to state: ModuleContext.State,
-  action: @Reflection @escaping (ModuleContext) throws -> ()
- ) rethrows {
-  defer { self.callContext(with: state) }
-  try action(Self.context)
- }
 
  @discardableResult
  func callWithContext<A>(
@@ -198,10 +175,36 @@ public extension StaticModule {
  }
 }
 
+@Reflection
+extension StaticModule {
+ @discardableResult
+ func withContext<A>(
+  action: @Reflection @escaping (ModuleContext) throws -> A
+ ) rethrows -> A {
+  try action(Self.context)
+ }
+ 
+ func callWithContext(
+  action: @Reflection @escaping (ModuleContext) throws -> ()
+ ) rethrows {
+  defer { self.callContext() }
+  try action(Self.context)
+ }
+ 
+ func callWithContext(
+  to state: ModuleContext.State,
+  action: @Reflection @escaping (ModuleContext) throws -> ()
+ ) rethrows {
+  defer { self.callContext(with: state) }
+  try action(Self.context)
+ }
+ 
+}
+
 #if canImport(Combine) && canImport(SwiftUI)
 import Combine
 
-@Reflection(unsafe)
+@Reflection
 public extension StaticModule {
  var contextWillChange: ModuleContext.ObjectWillChangePublisher {
   Self.context.objectWillChange
@@ -211,7 +214,7 @@ public extension StaticModule {
 #elseif os(WASI) && canImport(TokamakCore) && canImport(OpenCombine)
 import OpenCombine
 
-@Reflection(unsafe)
+@Reflection
 public extension StaticModule {
  var contextWillChange: ModuleContext.ObjectWillChangePublisher {
   Self.context.objectWillChange

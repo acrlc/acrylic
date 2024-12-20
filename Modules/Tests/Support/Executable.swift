@@ -1,3 +1,4 @@
+import func Foundation.exit
 /// A test that calls `static func main()` with context support
 public protocol StaticTests: Tests {
  static func main() async

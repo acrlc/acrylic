@@ -4,7 +4,10 @@
 import Utilities
 
 /// A module that benchmarks functions
-extension Benchmarks: TestProtocol, @unchecked Sendable {
+extension Benchmarks:
+ TestProtocol,
+ @retroactive Identifiable,
+ @unchecked @retroactive Sendable {
  public func callAsTest() async throws {
   do {
    let results = try await self()
@@ -122,6 +125,11 @@ public struct BenchmarkModules<ID: Hashable>: TestProtocol {
        id, warmup: warmup, iterations: iterations, timeout: timeout,
        perform: task.callAsFunction
       )
+     } else if var test = module as? (any TestProtocol) {
+      return Measure.Async(
+       id, warmup: warmup, iterations: iterations, timeout: timeout,
+       perform: { try await test.callAsTest() }
+      )
      } else {
       return Measure.Async(
        id, warmup: warmup, iterations: iterations, timeout: timeout,
@@ -164,6 +172,11 @@ public struct BenchmarkModules<ID: Hashable>: TestProtocol {
       return Measure(
        id, warmup: warmup, iterations: iterations, timeout: timeout,
        perform: task.callAsFunction
+      )
+     } else if var test = module as? (any TestProtocol) {
+      return Measure.Async(
+       id, warmup: warmup, iterations: iterations, timeout: timeout,
+       perform: { try await test.callAsTest() }
       )
      } else {
       return Measure.Async(

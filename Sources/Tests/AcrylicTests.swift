@@ -54,7 +54,8 @@ struct AcrylicTests: TestsCommand {
  }
 
  var tests: some Testable {
-  for _ in iterations {
+  for iteration in iterations {
+   let isFirstIteration = iteration == 1
    Benchmarks("Normal") {
     // note: not sure if these warmups do anything at all
     // plus, time is linear and many examples are recursive
@@ -90,8 +91,11 @@ struct AcrylicTests: TestsCommand {
     )
    }
 
-   Identity("Expected Count", count) == expectedCount
-   Identity("Property is nil", optionalCount) == nil
+   Identity("Expected Count", count) == expectedCount * Int(iteration)
+   Assert(
+    "Property is \(isFirstIteration ? "nil" : "not nil")",
+    isFirstIteration ? optionalCount == nil : optionalCount != nil
+   )
 
    Benchmarks(
     "Optional Property",
@@ -212,12 +216,6 @@ struct AcrylicTestsApp: App {
 }
 #endif
 
-extension Size: LosslessStringConvertible {
- public init?(_ description: String) {
-  self.init(stringValue: description)
- }
-}
-
 #if os(Linux)
 // MARK: - Exports
 // Some versions of swift don't recognize exports from other modules using the
@@ -261,7 +259,7 @@ public struct Echo: Function, @unchecked Sendable {
 /// A test that calls `static func main()` with command and context support
 public protocol TestsCommand: Tests & AsyncCommand {}
 public extension TestsCommand {
- mutating func main() async throws {
+ consuming func main() async throws {
   do { try await callAsTestFromContext() }
   catch {
    exit(Int32(error._code))

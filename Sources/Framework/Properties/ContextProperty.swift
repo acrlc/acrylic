@@ -35,7 +35,7 @@ public typealias DynamicProperties = [
 
 extension [(label: String, keyPath: AnyKeyPath, property: any DynamicProperty)]:
  @unchecked Sendable {}
-extension AnyKeyPath: @unchecked Sendable {}
+extension AnyKeyPath: @retroactive @unchecked Sendable {}
 
 // MARK: - Context Properties
 public protocol ContextualProperty: Identifiable, DynamicProperty, Sendable {
@@ -165,7 +165,6 @@ ContextProperty<Value: Sendable>: @unchecked Sendable, ContextualProperty {
 }
 
 public extension ContextProperty {
- @Reflection
  func update() {
   let state = context.state
   // update context when terminal or not currently updating the context

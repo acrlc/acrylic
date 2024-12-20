@@ -119,5 +119,5 @@ public extension TestProtocol where Self: AsyncFunction {
  }
 }
 
-extension Chalk.Color: @unchecked Sendable {}
-extension Chalk.Style: @unchecked Sendable {}
+extension Chalk.Color: @retroactive @unchecked Sendable {}
+extension Chalk.Style: @retroactive @unchecked Sendable {}

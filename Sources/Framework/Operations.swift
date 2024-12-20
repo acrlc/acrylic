@@ -1,4 +1,3 @@
-import Collections
 import Extensions
 
 public protocol AsyncOperator: Actor {
@@ -10,7 +9,7 @@ public protocol AsyncOperation: Sendable, Detachable {
  associatedtype Failure: Error
  var priority: TaskPriority? { get set }
  var detached: Bool { get set }
- var perform: @Sendable () async throws -> Output? { get }
+ var perform: () async throws -> Output? { get }
 }
 
 /// The endpoint for operations controlled by a module
@@ -18,7 +17,7 @@ public struct AsyncTask
 <Output: Sendable, Failure: Error>: AsyncOperation, @unchecked Sendable {
  public var priority: TaskPriority?
  public var detached: Bool
- public let perform: @Sendable () async throws -> Output?
+ public let perform: () async throws -> Output?
 
  public init(
   priority: TaskPriority? = nil,
@@ -29,21 +28,22 @@ public struct AsyncTask
   self.detached = detached
   perform = task
  }
-
+ 
  public init(
   priority: TaskPriority? = nil,
   detached: Bool = false,
   task: @Sendable @escaping () async -> Output?
- ) where Failure == Never {
+ ) where Output == Void, Failure == Never {
   self.priority = priority
   self.detached = detached
   perform = task
  }
+ 
 
  public static func detached(
   priority: TaskPriority? = nil,
   _ detached: Bool = true,
-  task: @Sendable @escaping () async throws -> Output
+  task: @Sendable @escaping () async throws -> Output?
  ) -> AsyncTask<Output, Failure> {
   AsyncTask<Output, Failure>(
    priority: priority, detached: detached, task: task
@@ -70,53 +70,51 @@ public struct AsyncTask
 /// tasks
 @globalActor
 public actor Tasks:
- @unchecked Sendable, AsyncOperator, Operational, ExpressibleAsEmpty {
+ @unchecked Sendable, AsyncOperator, Operational, ExpressibleAsEmpty
+{
  public static let shared = Tasks()
  public nonisolated static var empty: Self { Self() }
  public nonisolated var isEmpty: Bool { queue.keys.isEmpty }
 
  public typealias DefaultTask = AsyncTask<Sendable, any Error>
- public typealias Running = Deque<(Int, any Operational)>
- public typealias Detached = Deque<(Int, any Operational)>
+ public typealias Running = KeyValueStorage<any Operational>
+ public typealias Detached = KeyValueStorage<any Operational>
 
  @_spi(ModuleReflection)
- nonisolated
- public lazy var queue: Queue = .empty
+ @preconcurrency public nonisolated(unsafe) var queue: Queue = .empty
  @_spi(ModuleReflection)
- nonisolated
- public lazy var running: Running = .empty
+ @preconcurrency public nonisolated(unsafe) var running: Running = .empty
  @_spi(ModuleReflection)
- nonisolated
- public lazy var detached: Detached = .empty
+ @preconcurrency public nonisolated(unsafe) var detached: Detached = .empty
 
  @_spi(ModuleReflection)
- nonisolated
- public subscript(queue key: Int) -> DefaultTask? {
+ public nonisolated
+ subscript(queue key: Int) -> DefaultTask? {
   get { queue[key] }
   set { queue[key] = newValue }
  }
 
  @_spi(ModuleReflection)
  public subscript(running key: Int) -> (any Operational)? {
-  running.first(where: { $0.0 == key })?.1
+  running[key]
  }
 
  @_spi(ModuleReflection)
  public subscript(detached key: Int) -> (any Operational)? {
-  detached.first(where: { $0.0 == key })?.1
+  detached[key]
  }
 
  public nonisolated var isCancelled: Bool {
-  running.allSatisfy(\.1.isCancelled) &&
-   detached.allSatisfy(\.1.isCancelled)
+  running.values.allSatisfy(\.isCancelled) &&
+   detached.values.allSatisfy(\.isCancelled)
  }
 
  public nonisolated func invalidate() {
   while running.notEmpty {
-   running.popLast()?.1.cancel()
+   running.popLast()?.cancel()
   }
   while detached.notEmpty {
-   detached.popLast()?.1.cancel()
+   detached.popLast()?.cancel()
   }
   queue.empty()
  }
@@ -124,10 +122,10 @@ public actor Tasks:
  public func invalidate() async {
   await Tasks.run { @Sendable in
    while running.notEmpty {
-    running.popLast()?.1.cancel()
+    running.popLast()?.cancel()
    }
    while detached.notEmpty {
-    detached.popLast()?.1.cancel()
+    detached.popLast()?.cancel()
    }
    queue.empty()
   }
@@ -136,63 +134,63 @@ public actor Tasks:
  /// Cancels all (detached and synchronous) tasks
  public nonisolated func cancel() {
   while running.notEmpty {
-   running.popLast()?.1.cancel()
+   running.popLast()?.cancel()
   }
   while detached.notEmpty {
-   detached.popLast()?.1.cancel()
+   detached.popLast()?.cancel()
   }
  }
 
  public func cancel() async {
   await Tasks.run { @Sendable in
    while running.notEmpty {
-    running.popLast()?.1.cancel()
+    running.popLast()?.cancel()
    }
    while detached.notEmpty {
-    detached.popLast()?.1.cancel()
+    detached.popLast()?.cancel()
    }
   }
  }
 
  public nonisolated func wait() async throws {
-  for (_, task) in running {
+  for task in running.values {
    try await task.wait()
   }
  }
 
  public nonisolated func waitForDetached() async throws {
-  for (_, task) in detached {
+  for task in detached.values {
    try await task.wait()
   }
  }
 
  public nonisolated func waitForAll() async throws {
-  for (_, task) in running {
+  for task in running.values {
    try await task.wait()
   }
-  for (_, task) in detached {
+  for task in detached.values {
    try await task.wait()
   }
  }
 
  @discardableResult
  public nonisolated func next() async throws -> Sendable? {
-  try await running.popFirst()?.1.wait()
+  try await running.popFirst()?.wait()
  }
 
  @discardableResult
  public nonisolated func last() async throws -> Sendable? {
-  try await running.popLast()?.1.wait()
+  try await running.popLast()?.wait()
  }
 
  @discardableResult
  public nonisolated func nextDetached() async throws -> Sendable? {
-  try await detached.popFirst()?.1.wait()
+  try await detached.popFirst()?.wait()
  }
 
  @discardableResult
  public nonisolated func lastDetached() async throws -> Sendable? {
-  try await detached.popLast()?.1.wait()
+  try await detached.popLast()?.wait()
  }
 
  public func callAsFunction() async throws {
@@ -201,12 +199,12 @@ public actor Tasks:
    let (key, task) = (keys[index], tasks[index])
 
    if task.detached {
-    detached.append(
-     (key, Task.detached(priority: task.priority, operation: task.perform))
+    detached.store(
+     Task.detached(priority: task.priority, operation: task.perform), for: key
     )
    } else {
     let task = Task(priority: task.priority, operation: task.perform)
-    running.append((key, task))
+    running.store(task, for: key)
 
     try await task.wait()
    }
@@ -230,7 +228,7 @@ public actor Tasks:
 
  @Tasks
  static func run<T: Sendable>(
-  resultType: T.Type = T.self, body: @Tasks () throws -> T
+  resultType _: T.Type = T.self, body: @Tasks () throws -> T
  ) async rethrows -> T {
   try body()
  }
@@ -238,11 +236,11 @@ public actor Tasks:
  @_spi(ModuleReflection)
  @discardableResult
  public static func detached<T: Sendable>(
-  resultType: T.Type = T.self,
+  resultType _: T.Type = T.self,
   body: @Tasks @escaping () throws -> T,
-  onResult: @escaping (T) -> (),
-  onError: @escaping (any Error) -> ()
- ) -> Task<(), Never> {
+  onResult: @escaping (T) -> Void,
+  onError: @escaping (any Error) -> Void
+ ) -> Task<Void, Never> {
   Task { @Tasks in
    do {
     try onResult(body())
@@ -255,10 +253,10 @@ public actor Tasks:
  @_spi(ModuleReflection)
  @discardableResult
  public static func detached<T: Sendable>(
-  resultType: T.Type = T.self,
+  resultType _: T.Type = T.self,
   body: @Tasks @escaping () throws -> T,
-  onResult: @escaping (T) -> ()
- ) -> Task<(), any Error> {
+  onResult: @escaping (T) -> Void
+ ) -> Task<Void, any Error> {
   Task { @Tasks in
    try onResult(body())
   }
@@ -267,9 +265,9 @@ public actor Tasks:
  @_spi(ModuleReflection)
  @discardableResult
  public static func detached<T: Sendable>(
-  resultType: T.Type = T.self,
+  resultType _: T.Type = T.self,
   body: @Tasks @escaping () throws -> T,
-  onError: @escaping (any Error) -> ()
+  onError: @escaping (any Error) -> Void
  ) -> Task<T?, Never> {
   Task { @Tasks in
    do {
@@ -284,7 +282,7 @@ public actor Tasks:
  @_spi(ModuleReflection)
  @discardableResult
  public static func detached<T: Sendable>(
-  resultType: T.Type = T.self,
+  resultType _: T.Type = T.self,
   body: @Tasks @escaping () async throws -> T
  ) -> Task<T, any Error> {
   Task { @Tasks in try await body() }
@@ -344,12 +342,12 @@ extension Tasks: AsyncSequence {
     let (key, task) = (tasks.queue.keys[position], tasks.queue.values[position])
 
     if task.detached {
-     tasks.detached.append(
-      (key, Task.detached(priority: task.priority, operation: task.perform))
+     tasks.detached.store(
+      Task.detached(priority: task.priority, operation: task.perform), for: key
      )
     } else {
      let task = Task(priority: task.priority, operation: task.perform)
-     tasks.running.append((key, task))
+     tasks.running.store(task, for: key)
 
      try await task.wait()
     }
@@ -556,13 +554,6 @@ public extension Task where Failure == Never {
  func wait() async -> Success {
   await value
  }
-}
-
-// MARK: Helper Extensions
-extension Deque: ExpressibleAsEmpty {
- public static var empty: Self { Self() }
- @inline(__always)
- public var notEmpty: Bool { !isEmpty }
 }
 
 // MARK: Helper Functions

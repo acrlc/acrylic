@@ -1,5 +1,6 @@
 public protocol Module: Identifiable {
  associatedtype VoidFunction: Module
+ @preconcurrency @Reflection
  @Modular
  var void: VoidFunction { get async throws }
 }
@@ -45,15 +46,15 @@ public extension Module {
  
  @_spi(ModuleReflection)
  @inline(__always)
- var __erasedID: AnyHashable? {
+ nonisolated var __erasedID: AnyHashable {
   AnyHashable(id)
  }
 
  @_spi(ModuleReflection)
  @inline(__always)
- var __id: String {
-  if !(ID.self is Never.Type), !(ID.self is EmptyID.Type) {
-   let id = String(describing: id).readableRemovingQuotes
+ nonisolated var __id: String {
+  if let self = self as? any Identifiable {
+   let id = String(describing: self.id).readableRemovingQuotes
    if id != "nil" {
     return id
    }
@@ -63,7 +64,7 @@ public extension Module {
 
  @_spi(ModuleReflection)
  @inline(__always)
- var __key: Int { __id.hashValue }
+ nonisolated var __key: Int { __id.hashValue }
 
  @_spi(ModuleReflection)
  @Reflection
@@ -116,7 +117,7 @@ public extension Module {
  }
 
  @usableFromInline
- internal static var _mangledName: String {
+ internal nonisolated static var _mangledName: String {
   Swift._mangledTypeName(Self.self) ?? String(describing: Self.self)
  }
 
@@ -126,7 +127,7 @@ public extension Module {
  }
 
  @_spi(ModuleReflection)
- var _type: ModuleType {
+ nonisolated var _type: ModuleType {
   self is any AsyncFunction
    ? .asyncFunction
    : self is any Function ? .function : .module
@@ -145,15 +146,15 @@ public extension Module where VoidFunction == Never {
 // MARK: - Default Modules
 public struct EmptyModule: Module, ExpressibleAsEmpty {
  public typealias Body = Never
- public static let empty = Self()
+ public nonisolated static let empty = Self()
  public var isEmpty: Bool { true }
- public init() {}
+ public nonisolated init() {}
 }
 
 @_spi(ModuleReflection)
 public extension Module {
  @_disfavoredOverload
- var isEmpty: Bool {
+ nonisolated var isEmpty: Bool {
   switch self {
   case let `self` as [[any Module]]: self.allSatisfy(\.isEmpty)
   case let `self` as [any Module]: self.allSatisfy(\.isEmpty)
@@ -164,11 +165,11 @@ public extension Module {
  }
 
  @_disfavoredOverload
- var notEmpty: Bool { !isEmpty }
+ nonisolated var notEmpty: Bool { !isEmpty }
 }
 
 // MARK: - Protocol add-ons
-extension Optional: Identifiable where Wrapped: Module {
+extension Optional: @retroactive Identifiable where Wrapped: Module & Identifiable {
  public var id: Wrapped.ID? { self?.id }
 }
 
@@ -193,10 +194,10 @@ public extension Module {
 }
 
 import struct Core.EmptyID
-public extension Module where ID == EmptyID {
+public extension Module {
  @_disfavoredOverload
- var id: EmptyID { EmptyID(placeholder: "\(Self.self)") }
+ nonisolated var id: EmptyID { EmptyID(placeholder: "\(Self.self)") }
 }
 
-extension AnyHashable: @unchecked Sendable {}
+extension AnyHashable: @retroactive @unchecked Sendable {}
 extension AnyHashable?: @unchecked Sendable {}

@@ -73,11 +73,13 @@ import protocol Core.ExpressibleAsEmpty
 import protocol Core.ExpressibleAsStart
 import protocol Core.Infallible
 
-extension Range: ExpressibleAsEmpty where Bound: ExpressibleAsStart {
+extension Range: @retroactive ExpressibleAsEmpty
+where Bound: ExpressibleAsStart {
  public static var empty: Self { Self(uncheckedBounds: (.start, .start)) }
 }
 
-extension ClosedRange: ExpressibleAsEmpty where Bound: ExpressibleAsStart {
+extension ClosedRange: @retroactive ExpressibleAsEmpty
+where Bound: ExpressibleAsStart {
  public static var empty: Self { Self(uncheckedBounds: (.start, .start)) }
 }
 

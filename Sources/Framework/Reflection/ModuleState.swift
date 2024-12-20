@@ -1,6 +1,7 @@
 import struct Core.UnsafeRecursiveNode
-@_spi(Reflection) import ReflectionMirror
-import SwiftShims
+@_spi(Reflection) import func ReflectionMirror._forEachFieldWithKeyPath
+@_spi(Reflection) import struct ReflectionMirror._EachFieldOptions
+import func SwiftShims.swift_isClassType
 
 @_spi(ModuleReflection)
 public protocol StateActor: Sendable {
@@ -231,7 +232,7 @@ public extension Module {
 
   if !index.element.isClassType {
    ReflectionMirror._forEachFieldWithKeyPath(
-    of: Self.self, options: .ignoreUnknown
+    of: Self.self, options: _EachFieldOptions.ignoreUnknown // temporary 6.1-dev compiler fix 
     ) { char, keyPath in
      let label = String(cString: char)
      if
@@ -258,7 +259,7 @@ public extension Module {
 
   if !index.element.isClassType {
    ReflectionMirror._forEachFieldWithKeyPath(
-    of: Self.self,options: .ignoreUnknown
+    of: Self.self,options: _EachFieldOptions.ignoreUnknown
     ) { char, keyPath in
      let label = String(cString: char)
      if
@@ -343,7 +344,7 @@ public extension ModuleIndex {
 }
 
 @_spi(ModuleReflection)
-extension ModuleIndex: CustomStringConvertible {
+extension ModuleIndex: @retroactive CustomStringConvertible {
  public var description: String {
   if element.isIdentifiable {
    let desc = String(describing: element.id).readableRemovingQuotes
@@ -364,7 +365,7 @@ extension ModuleIndex: CustomStringConvertible {
 
 @_spi(ModuleReflection)
 public extension Module {
- static var typeConstructorName: String {
+ nonisolated static var typeConstructorName: String {
   let name = Swift._typeName(Self.self)
   let bracketCount = name.count(for: "<")
 
@@ -432,9 +433,9 @@ public extension Module {
  }
 
  @_transparent
- var typeConstructorName: String { Self.typeConstructorName }
+ nonisolated var typeConstructorName: String { Self.typeConstructorName }
 
- var idString: String? {
+ nonisolated var idString: String? {
   if isIdentifiable {
    let id: ID? = if let id = self.id as? (any ExpressibleByNilLiteral) {
     nil ~= id ? nil : self.id
@@ -467,7 +468,7 @@ public extension Module {
 
 @_spi(ModuleReflection)
 public extension Module {
- var isIdentifiable: Bool {
+ nonisolated var isIdentifiable: Bool {
   !(ID.self is Never.Type) && !(ID.self is EmptyID.Type)
  }
 }

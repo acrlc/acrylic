@@ -2,13 +2,13 @@
 import struct Time.Timer
 
 @_spi(ModuleTests)
-public final class TestState<A: Testable>: StateActor, @unchecked Sendable {
+public struct TestState<A: Testable>: StateActor, @unchecked Sendable {
  public static var unknown: Self { Self() }
  public let context = ModuleContext()
  public var baseTest: A { context.index.element as! A }
- var timer = Timer()
+ let timer = StaticTimer()
 
- public required init() {}
+ public init() {}
 
  @Reflection
  @discardableResult
@@ -59,7 +59,7 @@ extension Tasks {
  func callAsTest(
   index: ModuleIndex,
   context: ModuleContext,
-  with state: isolated TestState<some Testable>
+  with state: TestState<some Testable>
  ) async throws -> [Int: Sendable]? {
   let module = index.element
 
@@ -93,7 +93,7 @@ extension Tasks {
        "\n[ \(label, style: .bold) ]",
        "\("starting", color: .cyan)",
        "\((module is any Tests) ? "Tests" : name, color: .cyan, style: .bold)",
-       "❖"
+ "❖"
       )
      }
     }
@@ -104,10 +104,7 @@ extension Tasks {
    return nil
   }
 
-  var timer: Timer {
-   get { state.timer }
-   set { state.timer = newValue }
-  }
+  var timer: StaticTimer { state.timer }
 
   var endTime: String
   var endMessage: String {
@@ -118,13 +115,13 @@ extension Tasks {
   do {
    var results: [Int: Sendable] = .empty
 
-   state.timer.fire()
+   timer.fire()
    let (keys, tasks) = (queue.keys, queue.values)
    for index in keys.indices {
     let (key, task) = (keys[index], tasks[index])
 
     if task.detached {
-     detached.append((key, Task { try await task.perform() }))
+     detached.store(Task { try await task.perform() }, for: key)
     }
     else {
      results[key] = try await task.perform()
@@ -254,7 +251,7 @@ public extension Reflection {
  ) async throws -> (Bool, TestState<A>) {
   guard let state = states[key] as? TestState<A> else {
    states.store(TestState<A>(), for: key)
-   unowned var state: TestState<A> {
+   var state: TestState<A> {
     get { states[key] as! TestState<A> }
     set { states[key] = newValue }
    }

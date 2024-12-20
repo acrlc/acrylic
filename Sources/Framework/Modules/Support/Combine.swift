@@ -147,5 +147,5 @@ public extension CombineModules {
  }
 }
 
-extension AnyCancellable: @unchecked Sendable {}
+extension AnyCancellable: @retroactive @unchecked Sendable {}
 #endif

@@ -9,9 +9,11 @@ import OpenCombine
 
 #if os(WASI)
 import TokamakCore
+
 extension ModuleContext: OpenCombine.ObservableObject {}
 #else
 import SwiftUI
+
 extension ModuleContext: Combine.ObservableObject {}
 #endif
 
@@ -54,7 +56,8 @@ public struct _DynamicContextBindingProperty
 @propertyWrapper
 public struct _ObservedContextAliasProperty
 <A: ContextModule, Value: Sendable>:
- @unchecked Sendable, DynamicProperty {
+ @unchecked Sendable, DynamicProperty
+{
  public var id = A._mangledName.hashValue
 
  @usableFromInline
@@ -102,13 +105,12 @@ public struct _ObservedContextAliasProperty
 
 #if os(WASI)
 extension _ObservedContextAliasProperty: ObservedProperty {
- public var objectWillChange: AnyPublisher<(), Never> {
+ public var objectWillChange: AnyPublisher<Void, Never> {
   context.objectWillChange.map { _ in }.eraseToAnyPublisher()
  }
 }
 #endif
 
-@Reflection(unsafe)
 public extension _ObservedContextAliasProperty {
  init(
   wrappedValue: Value,
@@ -161,7 +163,7 @@ public extension _ObservedContextAliasProperty {
  }
 
  @_disfavoredOverload
- init(_ type: A.Type, _ call: Bool = false) where Value == A {
+ init(_: A.Type, _ call: Bool = false) where Value == A {
   keyPath = \A.self
   _context = ObservedObject(
    wrappedValue:
@@ -178,7 +180,7 @@ public extension _ObservedContextAliasProperty {
  init(
   wrappedValue: Value,
   _ keyPath: KeyPath<A, ContextProperty<Value>>, _ call: Bool = false,
-  animation: Animation
+  animation _: Animation
  ) {
   self.keyPath = keyPath.appending(path: \.wrappedValue)
   Reflection.cacheOrCall(
@@ -197,7 +199,7 @@ public extension _ObservedContextAliasProperty {
 
  init(
   _ keyPath: KeyPath<A, ContextProperty<Value>>, _ call: Bool = false,
-  animation: Animation
+  animation _: Animation
  ) {
   Reflection.cacheOrCall(
    id: A._mangledName,
@@ -235,8 +237,9 @@ public extension _ObservedContextAliasProperty {
  }
 
  @_disfavoredOverload
- init(_ type: A.Type, _ call: Bool = false, animation: Animation)
-  where Value == A {
+ init(_: A.Type, _ call: Bool = false, animation: Animation)
+  where Value == A
+ {
   keyPath = \A.self
   _context = ObservedObject(
    wrappedValue:
@@ -308,7 +311,8 @@ public extension ToolbarContent {
 @propertyWrapper
 public struct _ObservedModuleAliasProperty
 <A: ObservableModule, Value: Sendable>:
- @unchecked Sendable, ContextualProperty {
+ @unchecked Sendable, ContextualProperty
+{
  public var id = A._mangledName.hashValue
  public var context: ModuleContext
 
@@ -366,10 +370,9 @@ public struct _ObservedModuleAliasProperty
  #endif
 }
 
-@Reflection(unsafe)
 public extension _ObservedModuleAliasProperty {
  init(
-  wrappedValue: Value,
+  wrappedValue _: Value,
   _ keyPath: KeyPath<A, ContextProperty<Value>>, _ call: Bool = false
  ) {
   self.keyPath = keyPath.appending(path: \.wrappedValue)
@@ -406,7 +409,7 @@ public extension _ObservedModuleAliasProperty {
  }
 
  @_disfavoredOverload
- init(_ type: A.Type, _ call: Bool = false) where Value == A {
+ init(_: A.Type, _ call: Bool = false) where Value == A {
   keyPath = \A.self
   context = Reflection.cacheOrCall(
    moduleType: A.self,
@@ -417,7 +420,7 @@ public extension _ObservedModuleAliasProperty {
 
  #if os(macOS) || os(iOS)
  init(
-  wrappedValue: Value,
+  wrappedValue _: Value,
   _ keyPath: KeyPath<A, ContextProperty<Value>>, _ call: Bool = false,
   animation: Animation
  ) {
@@ -465,8 +468,9 @@ public extension _ObservedModuleAliasProperty {
  }
 
  @_disfavoredOverload
- init(_ type: A.Type, _ call: Bool = false, animation: Animation)
-  where Value == A {
+ init(_: A.Type, _ call: Bool = false, animation: Animation)
+  where Value == A
+ {
   keyPath = \A.self
   context = Reflection.cacheOrCall(
    moduleType: A.self,
@@ -480,7 +484,7 @@ public extension _ObservedModuleAliasProperty {
 
 #if os(WASI)
 extension _ObservedModuleAliasProperty: ObservedProperty {
- public var objectWillChange: AnyPublisher<(), Never> {
+ public var objectWillChange: AnyPublisher<Void, Never> {
   A.shared.objectWillChange.map { _ in }.eraseToAnyPublisher()
  }
 }
@@ -489,7 +493,8 @@ extension _ObservedModuleAliasProperty: ObservedProperty {
 @propertyWrapper
 public struct _StaticObservedModuleAliasProperty
 <A: StaticModule, Value: Sendable>:
- @unchecked Sendable, DynamicProperty {
+ @unchecked Sendable, DynamicProperty
+{
  public var id = A._mangledName.hashValue
 
  @usableFromInline
@@ -543,7 +548,6 @@ public struct _StaticObservedModuleAliasProperty
  #endif
 }
 
-@Reflection(unsafe)
 public extension _StaticObservedModuleAliasProperty {
  init(
   wrappedValue: Value,
@@ -592,7 +596,7 @@ public extension _StaticObservedModuleAliasProperty {
  }
 
  @_disfavoredOverload
- init(_ type: A.Type, _ call: Bool = false) where Value == A {
+ init(_: A.Type, _ call: Bool = false) where Value == A {
   keyPath = \A.self
   _context = ObservedObject(
    wrappedValue:
@@ -663,8 +667,9 @@ public extension _StaticObservedModuleAliasProperty {
  }
 
  @_disfavoredOverload
- init(_ type: A.Type, _ call: Bool = false, animation: Animation)
-  where Value == A {
+ init(_: A.Type, _ call: Bool = false, animation: Animation)
+  where Value == A
+ {
   keyPath = \A.self
   _context = ObservedObject(
    wrappedValue:
@@ -681,7 +686,7 @@ public extension _StaticObservedModuleAliasProperty {
 
 #if os(WASI)
 extension _StaticObservedModuleAliasProperty: ObservedProperty {
- public var objectWillChange: AnyPublisher<(), Never> {
+ public var objectWillChange: AnyPublisher<Void, Never> {
   context.objectWillChange.map { _ in }.eraseToAnyPublisher()
  }
 }
@@ -692,7 +697,8 @@ extension _StaticObservedModuleAliasProperty: ObservedProperty {
 @propertyWrapper
 public struct _StaticModuleAliasProperty
 <A: StaticModule, Value: Sendable>:
- @unchecked Sendable, ContextualProperty {
+ @unchecked Sendable, ContextualProperty
+{
  public var id = A._mangledName.hashValue
  @usableFromInline
  let keyPath: WritableKeyPath<A, Value>
@@ -731,10 +737,10 @@ public struct _StaticModuleAliasProperty
  #endif
 }
 
-@Reflection(unsafe)
+@Reflection
 public extension _StaticModuleAliasProperty {
  init(
-  wrappedValue: Value,
+  wrappedValue _: Value,
   _ keyPath: KeyPath<A, ContextProperty<Value>>, _ call: Bool = false
  ) {
   self.keyPath = keyPath.appending(path: \.wrappedValue)
@@ -771,7 +777,7 @@ public extension _StaticModuleAliasProperty {
  }
 
  @_disfavoredOverload
- init(_ type: A.Type, _ call: Bool = false) where Value == A {
+ init(_: A.Type, _ call: Bool = false) where Value == A {
   keyPath = \A.self
   context = Reflection.cacheOrCall(
    moduleType: A.self,
@@ -782,7 +788,7 @@ public extension _StaticModuleAliasProperty {
 
  #if canImport(SwiftUI)
  init(
-  wrappedValue: Value,
+  wrappedValue _: Value,
   _ keyPath: KeyPath<A, ContextProperty<Value>>, _ call: Bool = false,
   animation: Animation
  ) {
@@ -831,8 +837,9 @@ public extension _StaticModuleAliasProperty {
  }
 
  @_disfavoredOverload
- init(_ type: A.Type, _ call: Bool = false, animation: Animation)
-  where Value == A {
+ init(_: A.Type, _ call: Bool = false, animation: Animation)
+  where Value == A
+ {
   keyPath = \A.self
   context = Reflection.cacheOrCall(
    moduleType: A.self,
@@ -847,7 +854,8 @@ public extension _StaticModuleAliasProperty {
 @propertyWrapper
 public struct _ContextAliasProperty
 <A: ContextModule, Value: Sendable>:
- @unchecked Sendable, ContextualProperty {
+ @unchecked Sendable, ContextualProperty
+{
  public var id = A._mangledName.hashValue
 
  @usableFromInline
@@ -855,7 +863,6 @@ public struct _ContextAliasProperty
 
  public unowned var context: ModuleContext = .unknown
 
- @Reflection(unsafe)
  @usableFromInline
  var module: A {
   nonmutating get { context.index.element as! A }
@@ -889,10 +896,10 @@ public struct _ContextAliasProperty
  #endif
 }
 
-@Reflection(unsafe)
+@Reflection
 public extension _ContextAliasProperty {
  init(
-  wrappedValue: Value,
+  wrappedValue _: Value,
   _ keyPath: KeyPath<A, ContextProperty<Value>>, _ call: Bool = false
  ) {
   self.keyPath = keyPath.appending(path: \.wrappedValue)
@@ -939,7 +946,7 @@ public extension _ContextAliasProperty {
  }
 
  @_disfavoredOverload
- init(_ type: A.Type, _ call: Bool = false) where Value == A {
+ init(_: A.Type, _ call: Bool = false) where Value == A {
   keyPath = \A.self
   context = Reflection.cacheOrCall(
    id: A._mangledName,
@@ -951,9 +958,9 @@ public extension _ContextAliasProperty {
 
  #if canImport(SwiftUI)
  init(
-  wrappedValue: Value,
+  wrappedValue _: Value,
   _ keyPath: KeyPath<A, ContextProperty<Value>>, _ call: Bool = false,
-  animation: Animation
+  animation _: Animation
  ) {
   self.keyPath = keyPath.appending(path: \.wrappedValue)
   Reflection.cacheOrCall(
@@ -972,7 +979,7 @@ public extension _ContextAliasProperty {
 
  init(
   _ keyPath: KeyPath<A, ContextProperty<Value>>, _ call: Bool = false,
-  animation: Animation
+  animation _: Animation
  ) {
   Reflection.cacheOrCall(
    id: A._mangledName,
@@ -1007,8 +1014,9 @@ public extension _ContextAliasProperty {
  }
 
  @_disfavoredOverload
- init(_ type: A.Type, _ call: Bool = false, animation: Animation)
-  where Value == A {
+ init(_: A.Type, _ call: Bool = false, animation: Animation)
+  where Value == A
+ {
   keyPath = \A.self
   context = Reflection.cacheOrCall(
    id: A._mangledName,

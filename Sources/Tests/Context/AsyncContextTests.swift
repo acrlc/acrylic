@@ -117,27 +117,18 @@ struct TestAsyncContext: Testable {
    /// most extreme cases with precision
    ///
    Benchmarks("ModuleContext Operations") {
-    Measure.Async(
-     "Update Active Context", warmup: 3, iterations: pressure,
-     perform: {
-      try await context.update(with: .active)
-     }
-    )
+    Measure.Async("Update Active Context", warmup: 3, iterations: pressure) {
+     try await context.update(with: .active)
+    }
 
-    Measure.Async(
-     "Call Idle Context", warmup: 3, iterations: pressure,
-     perform: {
-      try await context.callAsFunction(with: .idle)
-     }
-    )
+    Measure.Async("Call Idle Context", warmup: 3, iterations: pressure) {
+     try await context.callAsFunction(with: .idle)
+    }
 
-    Measure.Async(
-     "Cancel & Call Context", warmup: 3, iterations: pressure,
-     perform: {
-      await context.cancel()
-      try? await context.callTasks()
-     }
-    )
+    Measure.Async("Cancel & Call Context", warmup: 3, iterations: pressure) {
+     await context.cancel()
+     try? await context.callTasks()
+    }
    }
   }
  }

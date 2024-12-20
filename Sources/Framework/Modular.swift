@@ -38,7 +38,7 @@ public enum Modular {
 
 // MARK: - Module Extensions
 public typealias Modules = [any Module]
-extension Modules: Identifiable {}
+extension Modules: @retroactive Identifiable {}
 extension Modules: Module {
  public typealias Body = Never
  public var _compact: Self {

@@ -36,7 +36,7 @@ public extension Tests {
 }
 
 public extension Testable {
- mutating func callAsTestFromContext(id: AnyHashable? = nil) async throws {
+ consuming func callAsTestFromContext(id: AnyHashable? = nil) async throws {
   var start = Timer()
   var started = false
 

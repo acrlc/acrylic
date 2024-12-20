@@ -11,12 +11,11 @@ struct TestTasks: Testable {
 
    Perform.Async {
     background[queue: 0] =
-     AsyncTask.detached {
+     AsyncTask.detached { () -> Void in
       for int in [1, 2, 3, 4, 5].reversed() {
        try await sleep(for: .seconds(1))
        print(int, terminator: .space)
       }
-      return ()
      }
    }
 
@@ -44,19 +43,17 @@ struct TestTasks: Testable {
   }
 
   /// - Note - results from a module's context are not being stored for now
-  ///
   Identity("Tasks run and return results") {
    let tasks = Tasks()
-
+//
    // test normal operation
-   tasks[queue: 0] = AsyncTask {
+   tasks[queue: 0] = AsyncTask { () -> Void in
     for int in [1, 2, 3] {
      try await sleep(for: .seconds(0.1))
      print(int, terminator: .space)
     }
-    return
    }
-
+   
    // test return operation
    tasks[queue: 1] = AsyncTask {
     var sum = 0

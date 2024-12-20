@@ -5,13 +5,9 @@ public actor Reflection:
  public static let shared = Reflection()
  public static var keys: Set<Int> = .empty
  @_spi(ModuleReflection)
- public var states: KeyValueStorage<StateActor> = .empty
- 
- /// The global accessor for module states.
- @_spi(ModuleReflection)
  @Reflection
- public static var states: KeyValueStorage<StateActor> = .empty
-
+ public static var states = KeyValueStorage<StateActor>()
+ 
  @_spi(ModuleReflection)
  public static func assumeIsolated<T>(
   _ operation: @escaping () throws -> T,
@@ -120,6 +116,7 @@ public actor Reflection:
 @Reflection
 extension Reflection {
  /* FIXME: cache wrapped properties that are modules, as well */
+ @preconcurrency
  @usableFromInline
  @discardableResult
  static func cacheIfNeeded<A: StaticModule, B: StateActor>(
@@ -151,6 +148,8 @@ extension Reflection {
   return state as! B
  }
 
+
+ @preconcurrency
  @usableFromInline
  static func callIfNeeded<A: StaticModule, B: StateActor>(
   moduleType: A.Type,
@@ -188,6 +187,7 @@ extension Reflection {
   return state
  }
 
+ @preconcurrency
  @inlinable
  @discardableResult
  static func cacheOrCall<A: StateActor>(
@@ -206,6 +206,7 @@ extension Reflection {
   }
  }
 
+ @preconcurrency
  @usableFromInline
  @discardableResult
  static func cacheIfNeeded<A: StateActor>(
@@ -234,6 +235,7 @@ extension Reflection {
   return state
  }
 
+ @preconcurrency
  @usableFromInline
  @discardableResult
  static func cacheIfNeeded<A: StateActor>(
@@ -261,6 +263,7 @@ extension Reflection {
   return state
  }
 
+ @preconcurrency
  @usableFromInline
  @discardableResult
  static func asyncCacheIfNeeded<A: StateActor>(
@@ -288,6 +291,7 @@ extension Reflection {
   return state
  }
 
+ @preconcurrency
  @discardableResult
  @usableFromInline
  static func callModulePointer<A: StateActor>(
@@ -433,6 +437,7 @@ extension Reflection {
   return state
  }
 
+ @preconcurrency
  @discardableResult
  @inlinable
  static func cacheOrCall<A: StateActor>(
@@ -452,6 +457,7 @@ extension Reflection {
   }
  }
 
+ @preconcurrency
  @discardableResult
  @inlinable
  static func asyncCacheOrCall<A: StateActor>(
@@ -475,7 +481,7 @@ extension Reflection {
 // MARK: - Module Extensions
 @_spi(ModuleReflection)
 public extension Module {
- @Reflection
+ @preconcurrency @Reflection
  func contextInfo(_ id: AnyHashable? = nil) -> [String] {
   let key = id?.hashValue ?? __key
 

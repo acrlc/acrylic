@@ -46,7 +46,6 @@ public extension ContextModule {
  }
 }
 
-@Reflection(unsafe)
 public extension ContextModule {
  func callContext() async throws {
   try await Self.callContext()
@@ -133,13 +132,6 @@ public extension ContextModule {
  }
 
  @discardableResult
- func withContext<A>(
-  action: @Reflection @escaping (ModuleContext) throws -> A
- ) rethrows -> A {
-  try action(Self.context)
- }
-
- @discardableResult
  nonisolated func withContext<A: Sendable>(
   action: @Reflection @escaping (ModuleContext) async throws -> A
  ) async rethrows -> A {
@@ -155,12 +147,6 @@ public extension ContextModule {
   }
  }
 
- func callWithContext(
-  action: @Reflection @escaping (ModuleContext) throws -> ()
- ) rethrows {
-  defer { self.callContext() }
-  try action(Self.context)
- }
 
  @discardableResult
  nonisolated func callWithContext<A: Sendable>(
@@ -180,6 +166,40 @@ public extension ContextModule {
   }
  }
 
+ #if canImport(Combine) && canImport(SwiftUI)
+ @MainActor
+ @discardableResult
+ func state<A>(
+  action: @MainActor @escaping (inout Self) throws -> A
+ ) async rethrows -> A {
+  let context = await Self.context
+  let index = context.index
+  var module: Self {
+   get { index.element as! Self }
+   set { index.element = newValue }
+  }
+  defer { context.objectWillChange.send() }
+  return try action(&module)
+ }
+ #endif
+}
+
+@Reflection
+public extension ContextModule {
+ @discardableResult
+ func withContext<A>(
+  action: @Reflection @escaping (ModuleContext) throws -> A
+ ) rethrows -> A {
+  try action(Self.context)
+ }
+
+ func callWithContext(
+  action: @Reflection @escaping (ModuleContext) throws -> ()
+ ) rethrows {
+  defer { self.callContext() }
+  try action(Self.context)
+ }
+ 
  func callWithContext(
   to state: ModuleContext.State,
   action: @Reflection @escaping (ModuleContext) throws -> ()
@@ -196,23 +216,8 @@ public extension ContextModule {
   defer { self.callContext(with: state) }
   return try await action(Self.context)
  }
-
- #if canImport(Combine) && canImport(SwiftUI)
- @MainActor
- @discardableResult
- func state<A>(
-  action: @MainActor @escaping (inout Self) throws -> A
- ) async rethrows -> A {
-  let context = await Self.context
-  let index = context.index
-  var module: Self {
-   get { index.element as! Self }
-   set { index.element = newValue }
-  }
-  defer { context.objectWillChange.send() }
-  return try action(&module)
- }
-
+ 
+#if canImport(Combine) && canImport(SwiftUI)
  @discardableResult
  mutating func stateWithContext<A>(
   action: @Reflection @escaping (inout Self) throws -> A
@@ -245,7 +250,7 @@ public extension ContextModule {
 #if canImport(Combine) && canImport(SwiftUI)
 import Combine
 
-@Reflection(unsafe)
+@Reflection
 public extension ContextModule {
  var contextWillChange: ModuleContext.ObjectWillChangePublisher {
   Self.context.objectWillChange
