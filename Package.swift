@@ -14,18 +14,10 @@ let package = Package(
   .executable(name: "acrylicTests", targets: ["AcrylicTests"])
  ],
  dependencies: [
-  
-  
-  
-  
-  
   .package(url: "https://github.com/acrlc/Core.git", branch: "main"),
   .package(
    url: "https://github.com/acrlc/swift-reflection-mirror.git",
    branch: "wasm-compatible"
-  ),
-  .package(
-   url: "https://github.com/apple/swift-collections.git", from: "1.1.0"
   ),
   // for Tests library
   .package(url: "https://github.com/acrlc/Time.git", branch: "main"),
@@ -41,9 +33,7 @@ let package = Package(
    dependencies: [
     "Core",
     .product(name: "Extensions", package: "core"),
-    .product(name: "ReflectionMirror", package: "swift-reflection-mirror"),
-    .product(name: "OrderedCollections", package: "swift-collections"),
-    .product(name: "Collections", package: "swift-collections")
+    .product(name: "ReflectionMirror", package: "swift-reflection-mirror")
    ],
    path: "Sources/Framework"
   ),
@@ -98,8 +88,7 @@ if useLibraryEvolution {
 
 #if arch(wasm32)
 package.dependencies.append(
-// .package(url: "https://github.com/acrlc/tokamak.git", branch: "main")
- .package(path: "../tokamak")
+ .package(url: "https://github.com/acrlc/tokamak.git", branch: "main")
 )
 for target in package.targets {
  if target.name == "AcrylicTests" || target.name == "Acrylic" {
