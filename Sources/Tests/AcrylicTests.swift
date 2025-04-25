@@ -115,6 +115,9 @@ struct AcrylicTests: TestsCommand {
    Identity("Optional is not nil", optionalCount) != nil
    Identity(optionalCount!) == expectedCount
 
+   /// Note: Concurrent read/writes are blocking on the property wrapper
+   /// So, the numbers aren't exact but there should be any dead locking or
+   /// memory errors due to multiple operations
    Benchmarks(
     "Concurrent Property",
     onCompletion: {
@@ -195,6 +198,10 @@ struct AcrylicTests: TestsCommand {
 
   await MainActor.run { AcrylicTestsApp.main() }
   #endif
+ }
+ 
+ func onInterruption() async {
+  exit(0)
  }
 }
 

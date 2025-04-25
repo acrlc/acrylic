@@ -266,9 +266,9 @@ public struct Test<ID: Hashable>: Testable, @unchecked Sendable {
  public var id: ID?
  public var breakOnError: Bool = false
  public var sourceLocation: SourceLocation?
- public var setUpHandler: (() async throws -> ())?
- public var onCompletionHandler: (() async throws -> ())?
- public var cleanUpHandler: (() async throws -> ())?
+ public var setUpHandler: (() async throws -> Void)?
+ public var onCompletionHandler: (() async throws -> Void)?
+ public var cleanUpHandler: (() async throws -> Void)?
 
  @Modular
  var handler: () async throws -> Modules
@@ -297,9 +297,9 @@ public extension Test {
   fileID: String = #fileID,
   line: Int = #line,
   column: Int = #column,
-  setUp: (() async throws -> ())? = nil,
-  onCompletion: (() async throws -> ())? = nil,
-  cleanUp: (() async throws -> ())? = nil,
+  setUp: (() async throws -> Void)? = nil,
+  onCompletion: (() async throws -> Void)? = nil,
+  cleanUp: (() async throws -> Void)? = nil,
   @Modular handler: @escaping () async throws -> Modules
  ) {
   self.id = id
@@ -321,9 +321,9 @@ public extension Test {
   fileID: String = #fileID,
   line: Int = #line,
   column: Int = #column,
-  setUp: (() async throws -> ())? = nil,
-  onCompletion: (() async throws -> ())? = nil,
-  cleanUp: (() async throws -> ())? = nil,
+  setUp: (() async throws -> Void)? = nil,
+  onCompletion: (() async throws -> Void)? = nil,
+  cleanUp: (() async throws -> Void)? = nil,
   @Modular handler: @escaping () async throws -> Modules
  ) where ID == EmptyID {
   self.breakOnError = breakOnError
@@ -623,6 +623,21 @@ public extension Assertion where A == Bool, B == Swift.Void {
   self.operator = { condition, _ in condition }
  }
 }
+
+//public extension TestProtocol where Output: Equatable {
+// static func || (
+//  lhs: consuming Self, rhs: @escaping @autoclosure () throws -> Output
+// ) rethrows -> Assertion<ID, Output, Output> {
+//  Assertion(
+//   id: lhs.id, sourceLocation: lhs.sourceLocation,
+//   lhs: {
+//    let lhs = rhs.
+//   },
+//   operator: ==,
+//   rhs: rhs
+//  )
+// }
+//}
 
 // MARK: - Coalescing Assertions
 public extension Function where Output: Sendable & Equatable {
@@ -1045,14 +1060,14 @@ public struct Blackhole<ID: Hashable>: TestProtocol, @unchecked Sendable {
  public var id: ID?
  public var sourceLocation: SourceLocation?
  @inline(never)
- let perform: () async throws -> ()
+ let perform: () async throws -> Void
 
  public init(
   _ id: ID,
   fileID: String = #fileID,
   line: Int = #line,
   column: Int = #column,
-  _ perform: @escaping () async throws -> ()
+  _ perform: @escaping () async throws -> Void
  ) {
   self.id = id
   sourceLocation = SourceLocation(
@@ -1068,7 +1083,7 @@ public struct Blackhole<ID: Hashable>: TestProtocol, @unchecked Sendable {
   fileID: String = #fileID,
   line: Int = #line,
   column: Int = #column,
-  _ perform: @escaping () async throws -> ()
+  _ perform: @escaping () async throws -> Void
  ) where ID == EmptyID {
   sourceLocation = SourceLocation(
    fileID: fileID,
@@ -1084,7 +1099,7 @@ public struct Blackhole<ID: Hashable>: TestProtocol, @unchecked Sendable {
   fileID: String = #fileID,
   line: Int = #line,
   column: Int = #column,
-  _ perform: @escaping @autoclosure () throws -> ()
+  _ perform: @escaping @autoclosure () throws -> Void
  ) {
   self.id = id
   sourceLocation = SourceLocation(
@@ -1100,7 +1115,7 @@ public struct Blackhole<ID: Hashable>: TestProtocol, @unchecked Sendable {
   fileID: String = #fileID,
   line: Int = #line,
   column: Int = #column,
-  _ perform: @escaping @autoclosure () throws -> ()
+  _ perform: @escaping @autoclosure () throws -> Void
  ) where ID == EmptyID {
   sourceLocation = SourceLocation(
    fileID: fileID,
@@ -1251,16 +1266,16 @@ public struct Throw<Failure: Swift.Error & Sendable>: TestProtocol {
 
 public struct Unwrap<ID: Hashable, Value>: TestProtocol, @unchecked Sendable {
  public var id: ID?
-  public var sourceLocation: SourceLocation?
+ public var sourceLocation: SourceLocation?
  let result: () async throws -> Value?
- let handler: (Value) async throws -> ()
+ let handler: (Value) async throws -> Void
  public init(
   _ id: ID,
   _ result: @escaping @autoclosure () throws -> Value?,
   fileID: String = #fileID,
   line: Int = #line,
   column: Int = #column,
-  _ handler: @Sendable @escaping (Value) async throws -> ()
+  _ handler: @Sendable @escaping (Value) async throws -> Void
  ) {
   self.id = id
   sourceLocation = SourceLocation(
@@ -1271,115 +1286,13 @@ public struct Unwrap<ID: Hashable, Value>: TestProtocol, @unchecked Sendable {
   self.result = result
   self.handler = handler
  }
- 
+
  public init(
   _ result: @escaping @autoclosure () throws -> Value?,
   fileID: String = #fileID,
   line: Int = #line,
   column: Int = #column,
-  _ handler: @Sendable @escaping (Value) async throws -> ()
- ) where ID == EmptyID {
-  sourceLocation = SourceLocation(
-   fileID: fileID,
-   line: line,
-   column: column
-  )
-  self.result = result
-  self.handler = handler
- }
- 
- public init(
-  _ id: ID,
-  _ result: @escaping @autoclosure () throws -> Value?,
-  fileID: String = #fileID,
-  line: Int = #line,
-  column: Int = #column,
-  _ handler: @Sendable @escaping (Value) throws -> ()
- ) {
-  self.id = id
-  sourceLocation = SourceLocation(
-   fileID: fileID,
-   line: line,
-   column: column
-  )
-  self.result = result
-  self.handler = handler
- }
- 
- public init(
-  _ result: @escaping @autoclosure () throws -> Value?,
-  fileID: String = #fileID,
-  line: Int = #line,
-  column: Int = #column,
-  _ handler: @Sendable @escaping (Value) throws -> ()
- ) where ID == EmptyID {
-  sourceLocation = SourceLocation(
-   fileID: fileID,
-   line: line,
-   column: column
-  )
-  self.result = result
-  self.handler = handler
- }
- 
- public init(
-  _ id: ID,
-  _ result: @escaping () async throws -> Value?,
-  fileID: String = #fileID,
-  line: Int = #line,
-  column: Int = #column,
-  _ handler: @Sendable @escaping (Value) async throws -> ()
- ) {
-  self.id = id
-  sourceLocation = SourceLocation(
-   fileID: fileID,
-   line: line,
-   column: column
-  )
-  self.result = result
-  self.handler = handler
- }
- 
- public init(
-  _ result: @escaping () async throws -> Value?,
-  fileID: String = #fileID,
-  line: Int = #line,
-  column: Int = #column,
-  _ handler: @Sendable @escaping (Value) async throws -> ()
- ) where ID == EmptyID {
-  sourceLocation = SourceLocation(
-   fileID: fileID,
-   line: line,
-   column: column
-  )
-  self.result = result
-  self.handler = handler
- }
- 
- public init(
-  _ id: ID,
-  _ result: @escaping () throws -> Value?,
-  fileID: String = #fileID,
-  line: Int = #line,
-  column: Int = #column,
-  _ handler: @Sendable @escaping (Value) throws -> ()
- ) {
-  self.id = id
-  sourceLocation = SourceLocation(
-   fileID: fileID,
-   line: line,
-   column: column
-  )
-  self.result = result
-  self.handler = handler
- }
- 
- public init(
-  _ result: @escaping () throws -> Value?,
-  fileID: String = #fileID,
-  line: Int = #line,
-  column: Int = #column,
-  _ handler: @Sendable @escaping (Value) throws -> ()
+  _ handler: @Sendable @escaping (Value) async throws -> Void
  ) where ID == EmptyID {
   sourceLocation = SourceLocation(
    fileID: fileID,
@@ -1390,13 +1303,114 @@ public struct Unwrap<ID: Hashable, Value>: TestProtocol, @unchecked Sendable {
   self.handler = handler
  }
 
+ public init(
+  _ id: ID,
+  _ result: @escaping @autoclosure () throws -> Value?,
+  fileID: String = #fileID,
+  line: Int = #line,
+  column: Int = #column,
+  _ handler: @Sendable @escaping (Value) throws -> Void
+ ) {
+  self.id = id
+  sourceLocation = SourceLocation(
+   fileID: fileID,
+   line: line,
+   column: column
+  )
+  self.result = result
+  self.handler = handler
+ }
+
+ public init(
+  _ result: @escaping @autoclosure () throws -> Value?,
+  fileID: String = #fileID,
+  line: Int = #line,
+  column: Int = #column,
+  _ handler: @Sendable @escaping (Value) throws -> Void
+ ) where ID == EmptyID {
+  sourceLocation = SourceLocation(
+   fileID: fileID,
+   line: line,
+   column: column
+  )
+  self.result = result
+  self.handler = handler
+ }
+
+ public init(
+  _ id: ID,
+  _ result: @escaping () async throws -> Value?,
+  fileID: String = #fileID,
+  line: Int = #line,
+  column: Int = #column,
+  _ handler: @Sendable @escaping (Value) async throws -> Void
+ ) {
+  self.id = id
+  sourceLocation = SourceLocation(
+   fileID: fileID,
+   line: line,
+   column: column
+  )
+  self.result = result
+  self.handler = handler
+ }
+
+ public init(
+  _ result: @escaping () async throws -> Value?,
+  fileID: String = #fileID,
+  line: Int = #line,
+  column: Int = #column,
+  _ handler: @Sendable @escaping (Value) async throws -> Void
+ ) where ID == EmptyID {
+  sourceLocation = SourceLocation(
+   fileID: fileID,
+   line: line,
+   column: column
+  )
+  self.result = result
+  self.handler = handler
+ }
+
+ public init(
+  _ id: ID,
+  _ result: @escaping () throws -> Value?,
+  fileID: String = #fileID,
+  line: Int = #line,
+  column: Int = #column,
+  _ handler: @Sendable @escaping (Value) throws -> Void
+ ) {
+  self.id = id
+  sourceLocation = SourceLocation(
+   fileID: fileID,
+   line: line,
+   column: column
+  )
+  self.result = result
+  self.handler = handler
+ }
+
+ public init(
+  _ result: @escaping () throws -> Value?,
+  fileID: String = #fileID,
+  line: Int = #line,
+  column: Int = #column,
+  _ handler: @Sendable @escaping (Value) throws -> Void
+ ) where ID == EmptyID {
+  sourceLocation = SourceLocation(
+   fileID: fileID,
+   line: line,
+   column: column
+  )
+  self.result = result
+  self.handler = handler
+ }
 
  struct Error: LocalizedError {
   var errorDescription: String? {
    "Unexpectedly found nil while unwrapping Optional<\(Value.self)>"
   }
  }
- 
+
  public func callAsTest() async throws {
   guard let result = try await result() else { throw Error() }
   try await handler(result)

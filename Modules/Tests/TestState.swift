@@ -121,7 +121,7 @@ extension Tasks {
     let (key, task) = (keys[index], tasks[index])
 
     if task.detached {
-     detached.store(Task { try await task.perform() }, for: key)
+     detached.store(Task.detached { try await task.perform() }, for: key)
     }
     else {
      results[key] = try await task.perform()

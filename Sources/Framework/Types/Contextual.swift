@@ -7,7 +7,7 @@ public protocol ContextModule: Module {
 public extension ContextModule {
  static var state: ModuleState {
   Reflection.cacheIfNeeded(
-   id: _mangledName, module: { Self() }, stateType: ModuleState.self
+   id: _mangledName, module: Self(), stateType: ModuleState.self
   )
  }
 
@@ -80,37 +80,37 @@ public extension ContextModule {
  }
 
  nonisolated func callContext() {
-  Task {
+  Task.detached {
    try await Self.callContext()
   }
  }
 
  nonisolated func callContext(with state: ModuleContext.State) {
-  Task {
+  Task.detached {
    try await Self.callContext(with: state)
   }
  }
 
  nonisolated func cancelContext() {
-  Task {
+  Task.detached {
    await Self.cancelContext()
   }
  }
 
  nonisolated func cancelContext(with state: ModuleContext.State) {
-  Task {
+  Task.detached {
    await Self.cancelContext(with: state)
   }
  }
 
  nonisolated func updateContext() {
-  Task {
+  Task.detached {
    try await Self.updateContext()
   }
  }
 
  nonisolated func updateContext(with state: ModuleContext.State) {
-  Task {
+  Task.detached {
    try await Self.updateContext(with: state)
   }
  }
@@ -118,7 +118,7 @@ public extension ContextModule {
  nonisolated func withContext(
   action: @Reflection @escaping (ModuleContext) async throws -> ()
  ) {
-  Task { @Sendable in
+  Task.detached { @Sendable in
    try await action(Self.context)
   }
  }
@@ -126,7 +126,7 @@ public extension ContextModule {
  nonisolated func withContext(
   action: @Reflection @escaping (ModuleContext) throws -> ()
  ) rethrows {
-  Task { @Reflection in
+  Task.detached { @Reflection in
    try action(Self.context)
   }
  }
@@ -141,7 +141,7 @@ public extension ContextModule {
  nonisolated func callWithContext(
   action: @Reflection @escaping (ModuleContext) async throws -> ()
  ) {
-  Task { @Reflection in
+  Task.detached { @Reflection in
    defer { self.callContext() }
    return try await action(Self.context)
   }
@@ -152,7 +152,7 @@ public extension ContextModule {
  nonisolated func callWithContext<A: Sendable>(
   action: @Reflection @escaping (ModuleContext) async throws -> A
  ) async rethrows -> A {
-  defer { Task { @Reflection in self.callContext() } }
+  defer { Task.detached { @Reflection in self.callContext() } }
   return try await action(Self.context)
  }
 
@@ -160,7 +160,7 @@ public extension ContextModule {
   to state: ModuleContext.State,
   action: @Reflection @escaping (ModuleContext) async throws -> ()
  ) {
-  Task { @Reflection in
+  Task.detached { @Reflection in
    defer { self.callContext(with: state) }
    return try await action(Self.context)
   }
@@ -225,7 +225,7 @@ public extension ContextModule {
   let context = Self.context
   defer {
    context.objectWillChange.send()
-   Task {
+   Task.detached {
     context.cache = .empty
     try await context.actor.update()
     context.state = .active

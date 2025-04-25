@@ -7,7 +7,7 @@ public protocol StaticModule: Module {
 public extension StaticModule {
  static var state: ModuleState {
   Reflection.cacheIfNeeded(
-   id: _mangledName, module: { shared }, stateType: ModuleState.self
+   id: _mangledName, module: shared, stateType: ModuleState.self
   )
  }
 
@@ -50,87 +50,87 @@ public extension StaticModule {
  func callContext() async throws {
   try await Self.callContext()
  }
- 
+
  func callContext(with state: ModuleContext.State) async throws {
   try await Self.callContext(with: state)
  }
- 
+
  func cancelContext() async {
   await Self.cancelContext()
  }
- 
+
  func cancelContext(with state: ModuleContext.State) async {
   await Self.cancelContext(with: state)
  }
- 
+
  func updateContext() async throws {
   try await Self.updateContext()
  }
- 
- func updateContext(with state: ModuleContext.State) async throws {
+
+ func updateContext(with _: ModuleContext.State) async throws {
   try await Self.updateContext()
  }
- 
+
  func waitForContext() async throws {
   try await Self.waitForContext()
  }
- 
+
  func waitForAllOnContext() async throws {
   try await Self.waitForAllOnContext()
  }
- 
+
  nonisolated func callContext() {
-  Task {
+  Task.detached {
    try await Self.callContext()
   }
  }
- 
+
  nonisolated func callContext(with state: ModuleContext.State) {
-  Task {
+  Task.detached {
    try await Self.callContext(with: state)
   }
  }
- 
+
  nonisolated func cancelContext() {
-  Task {
+  Task.detached {
    await Self.cancelContext()
   }
  }
- 
+
  nonisolated func cancelContext(with state: ModuleContext.State) {
-  Task {
+  Task.detached {
    await Self.cancelContext(with: state)
   }
  }
- 
+
  nonisolated func updateContext() {
-  Task {
+  Task.detached {
    try await Self.updateContext()
   }
  }
- 
+
  nonisolated func updateContext(with state: ModuleContext.State) {
-  Task {
+  Task.detached {
    try await Self.updateContext(with: state)
   }
  }
- 
+
  nonisolated func withContext(
-  action: @Reflection @escaping (ModuleContext) async throws -> ()
+  action: @Reflection @escaping (ModuleContext) async throws -> Void
  ) {
-  Task {
+  Task.detached {
    try await action(Self.context)
   }
  }
- 
+
  nonisolated func withContext(
-  action: @Reflection @escaping (ModuleContext) throws -> ()
+  action: @Reflection @escaping (ModuleContext) throws -> Void
  ) rethrows {
-  Task { @Reflection in
+  Task.detached { @Reflection in
    try action(Self.context)
   }
  }
- 
+
  @discardableResult
  nonisolated func withContext<A>(
   action: @Reflection @escaping (ModuleContext) async throws -> A
@@ -139,31 +139,31 @@ public extension StaticModule {
  }
 
  nonisolated func callWithContext(
-  action: @Reflection @escaping (ModuleContext) async throws -> ()
+  action: @Reflection @escaping (ModuleContext) async throws -> Void
  ) {
-  Task { @Reflection in
+  Task.detached { @Reflection in
    defer { self.callContext() }
    return try await action(Self.context)
   }
  }
+
  @discardableResult
  nonisolated func callWithContext<A>(
   action: @Reflection @escaping (ModuleContext) async throws -> A
  ) async rethrows -> A {
-  defer { Task { @Reflection in self.callContext() } }
+  defer { Task.detached { @Reflection in self.callContext() } }
   return try await action(Self.context)
  }
 
  nonisolated func callWithContext(
   to state: ModuleContext.State,
-  action: @Reflection @escaping (ModuleContext) async throws -> ()
+  action: @Reflection @escaping (ModuleContext) async throws -> Void
  ) {
-  Task { @Reflection in
+  Task.detached { @Reflection in
    defer { self.callContext(with: state) }
    return try await action(Self.context)
   }
  }
-
 
  @discardableResult
  func callWithContext<A>(
@@ -183,22 +183,21 @@ extension StaticModule {
  ) rethrows -> A {
   try action(Self.context)
  }
- 
+
  func callWithContext(
-  action: @Reflection @escaping (ModuleContext) throws -> ()
+  action: @Reflection @escaping (ModuleContext) throws -> Void
  ) rethrows {
   defer { self.callContext() }
   try action(Self.context)
  }
- 
+
  func callWithContext(
   to state: ModuleContext.State,
-  action: @Reflection @escaping (ModuleContext) throws -> ()
+  action: @Reflection @escaping (ModuleContext) throws -> Void
  ) rethrows {
   defer { self.callContext(with: state) }
   try action(Self.context)
  }
- 
 }
 
 #if canImport(Combine) && canImport(SwiftUI)

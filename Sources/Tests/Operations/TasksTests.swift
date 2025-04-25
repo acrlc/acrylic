@@ -10,13 +10,12 @@ struct TestTasks: Testable {
    let background = Tasks()
 
    Perform.Async {
-    background[queue: 0] =
-     AsyncTask.detached { () -> Void in
-      for int in [1, 2, 3, 4, 5].reversed() {
-       try await sleep(for: .seconds(1))
-       print(int, terminator: .space)
-      }
+    background[queue: 0] = .detached { () -> () in
+     for int in [1, 2, 3, 4, 5].reversed() {
+      try await sleep(for: .seconds(1))
+      print(int, terminator: .space)
      }
+    }
    }
 
    Perform.Async.detached {
@@ -47,13 +46,13 @@ struct TestTasks: Testable {
    let tasks = Tasks()
 //
    // test normal operation
-   tasks[queue: 0] = AsyncTask { () -> Void in
+   tasks[queue: 0] = .detached { () -> () in
     for int in [1, 2, 3] {
      try await sleep(for: .seconds(0.1))
      print(int, terminator: .space)
     }
    }
-   
+
    // test return operation
    tasks[queue: 1] = AsyncTask {
     var sum = 0
@@ -69,7 +68,7 @@ struct TestTasks: Testable {
    var results: [Sendable] = .empty
 
    for try await (key, _) in tasks {
-    if let result = try await tasks[running: key]?.wait() {
+    if let result = try await tasks[checkedRunning: key]?.wait() {
      results.append(result)
     }
    }
@@ -83,7 +82,7 @@ struct TestTasks: Testable {
    let tasks = Tasks()
 
    // test normal operation
-   tasks[queue: 1] = AsyncTask.detached {
+   tasks[queue: 1] = .detached {
     print("One", terminator: .space)
     try await sleep(for: .milliseconds(100))
     return 1

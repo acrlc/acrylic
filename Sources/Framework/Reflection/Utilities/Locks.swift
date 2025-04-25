@@ -164,7 +164,7 @@ extension ReadWriteLock {
  /// - Parameter body: The block to execute while holding the reader lock.
  /// - Returns: The value returned by the block.
  @_transparent
- func withReaderLock<T>(_ body: () throws -> T) rethrows -> T {
+ borrowing func withReaderLock<T>(_ body: () throws -> T) rethrows -> T where T: ~Copyable {
   lockRead()
   defer {
    self.unlock()
@@ -202,17 +202,17 @@ extension ReadWriteLock {
  }
 }
 
-public final class ReadWriteLockedValue<Value>: @unchecked Sendable {
+public struct ReadWriteLockedValue<Value>: ~Copyable {
  private let lock = ReadWriteLock()
 
- @exclusivity(unchecked)
+ //@exclusivity(unchecked)
  private var value: Value
 
- init(_ initialValue: Value) {
+ init(_ initialValue: consuming Value) {
   value = consume initialValue
  }
 
- public func withReaderLock<A>(
+ public mutating func withReaderLock<A>(
   _ body: (inout Value) throws -> A
  ) rethrows -> A {
   try lock.withReaderLock {
@@ -220,7 +220,7 @@ public final class ReadWriteLockedValue<Value>: @unchecked Sendable {
   }
  }
 
- public func withWriterLock<A>(
+ public mutating func withWriterLock<A>(
   _ body: (inout Value) throws -> A
  ) rethrows -> A {
   try lock.withWriterLock {
@@ -228,7 +228,7 @@ public final class ReadWriteLockedValue<Value>: @unchecked Sendable {
   }
  }
  
- public func withReaderLockVoid(
+ public mutating func withReaderLockVoid(
   _ body: (inout Value) throws -> Void
  ) rethrows {
   try lock.withReaderLockVoid {
@@ -236,7 +236,7 @@ public final class ReadWriteLockedValue<Value>: @unchecked Sendable {
   }
  }
  
- public func withWriterLockVoid(
+ public mutating func withWriterLockVoid(
   _ body: (inout Value) throws -> Void
  ) rethrows {
   try lock.withWriterLockVoid {

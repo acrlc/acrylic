@@ -9,8 +9,8 @@ import Time
 
 @available(macOS 13, iOS 16, *)
 struct CounterView: View {
- @ObservedAlias(Counter.self)
- var counter
+ @ObservedContext(true, animation: .easeInOut)
+ var counter: Counter
 
  var delayOptions: [Time] { [0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0] }
  func switchDelay() {
@@ -19,9 +19,11 @@ struct CounterView: View {
    fatalError()
   }
   let nextIndex = delayOptions.index(after: index)
-  counter.delay = delayOptions[
-   nextIndex < delayOptions.endIndex ? nextIndex : delayOptions.startIndex
-  ]
+  counter.$delay.updateState(
+   delayOptions[
+    nextIndex < delayOptions.endIndex ? nextIndex : delayOptions.startIndex
+   ]
+  )
  }
 
  var body: some View {
@@ -96,18 +98,19 @@ struct CounterView: View {
 
 // MARK: Counter Module
 @available(macOS 13, iOS 16, *)
-final class Counter: ObservableModule, @unchecked Sendable {
- static var shared = Counter()
+struct Counter: ContextModule, @unchecked Sendable {
+ @Context
  var count: Int = .zero
+ @Context
  var updateTimer = Timer()
- @Published
+ @Context
  var delay: Time = .zero
 
  var void: some Module {
-  Perform.Async {
+  Perform.Async { @Reflection in
    let time = updateTimer.elapsed
 
-   await print(String.newline + contextInfo().joined(separator: ", "))
+   print(contextInfo().joined(separator: ", "))
 
    if delay > .zero {
     notify("sleeping for \(delay) …", for: .note)
@@ -132,10 +135,10 @@ final class Counter: ObservableModule, @unchecked Sendable {
 
   /* TODO: Enable auto-capturing where possible and create an update method for
    bounded modules.
-   
+
    let time = updateTimer.elapsed
 
-   await Print(String.newline + contextInfo().joined(separator: ", "))
+   Print(contextInfo().joined(separator: ", "))
 
    if delay > .zero {
     Perform.Async { notify("sleeping for \(delay) …", for: .note) }
@@ -161,9 +164,7 @@ final class Counter: ObservableModule, @unchecked Sendable {
 
  @MainActor
  func callAsFunction(_ amount: Int) {
-  callState {
-   count += amount
-  }
+  $count.callWithState { $0 += amount }
   // an async update occurs immediately after call action
   updateTimer.fire()
  }

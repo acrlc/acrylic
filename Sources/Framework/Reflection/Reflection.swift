@@ -1,4 +1,5 @@
 import struct Core.KeyValueStorage
+
 @globalActor
 public actor Reflection:
  @unchecked Sendable, Identifiable, Equatable {
@@ -7,7 +8,7 @@ public actor Reflection:
  @_spi(ModuleReflection)
  @Reflection
  public static var states = KeyValueStorage<StateActor>()
- 
+
  @_spi(ModuleReflection)
  public static func assumeIsolated<T>(
   _ operation: @escaping () throws -> T,
@@ -24,7 +25,7 @@ public actor Reflection:
  @_spi(ModuleReflection)
  @Reflection
  public static func run<T: Sendable>(
-  resultType: T.Type = T.self,
+  resultType _: T.Type = T.self,
   body: @Reflection () throws -> T
  ) rethrows -> T {
   try body()
@@ -33,12 +34,13 @@ public actor Reflection:
  @_spi(ModuleReflection)
  @discardableResult
  public static func task<T: Sendable>(
-  resultType: T.Type = T.self,
+  priority: TaskPriority? = nil,
+  resultType _: T.Type = T.self,
   body: @Reflection @escaping () throws -> T,
-  onResult: @escaping (T) -> (),
-  onError: @escaping (any Error) -> ()
- ) -> Task<(), Never> {
-  Task { @Reflection in
+  onResult: @escaping (T) -> Void,
+  onError: @escaping (any Error) -> Void
+ ) -> Task<Void, Never> {
+  Task.detached(priority: priority) { @Reflection in
    do {
     try onResult(body())
    } catch {
@@ -50,11 +52,12 @@ public actor Reflection:
  @_spi(ModuleReflection)
  @discardableResult
  public static func task<T: Sendable>(
-  resultType: T.Type = T.self,
+  priority: TaskPriority? = nil,
+  resultType _: T.Type = T.self,
   body: @Reflection @escaping () throws -> T,
-  onResult: @escaping (T) -> ()
- ) -> Task<(), any Error> {
-  Task { @Reflection in
+  onResult: @escaping (T) -> Void
+ ) -> Task<Void, any Error> {
+  Task.detached(priority: priority) { @Reflection in
    try onResult(body())
   }
  }
@@ -62,11 +65,12 @@ public actor Reflection:
  @_spi(ModuleReflection)
  @discardableResult
  public static func task<T: Sendable>(
-  resultType: T.Type = T.self,
+  priority: TaskPriority? = nil,
+  resultType _: T.Type = T.self,
   body: @Reflection @escaping () throws -> T,
-  onError: @escaping (any Error) -> ()
+  onError: @escaping (any Error) -> Void
  ) -> Task<T?, Never> {
-  Task { @Reflection in
+  Task.detached(priority: priority) { @Reflection in
    do {
     return try body()
    } catch {
@@ -79,15 +83,16 @@ public actor Reflection:
  @_spi(ModuleReflection)
  @discardableResult
  public static func task<T: Sendable>(
-  resultType: T.Type = T.self,
+  priority: TaskPriority? = nil,
+  resultType _: T.Type = T.self,
   body: @Reflection @escaping () throws -> T
  ) -> Task<T, any Error> {
-  Task { @Reflection in try body() }
+  Task.detached(priority: priority) { @Reflection in try body() }
  }
 
  @_spi(ModuleReflection)
  public static func assumeIsolatedModify<T>(
-  resultType: T.Type = T.self,
+  resultType _: T.Type = T.self,
   _ operation: @escaping (isolated Reflection) throws -> T,
   file: StaticString = #fileID,
   line: UInt = #line
@@ -102,7 +107,7 @@ public actor Reflection:
  @_spi(ModuleReflection)
  @Reflection
  public static func modify<T: Sendable>(
-  resultType: T.Type = T.self, body: @Reflection (Reflection) throws -> T
+  resultType _: T.Type = T.self, body: @Reflection (Reflection) throws -> T
  ) rethrows -> T {
   try body(shared)
  }
@@ -120,8 +125,8 @@ extension Reflection {
  @usableFromInline
  @discardableResult
  static func cacheIfNeeded<A: StaticModule, B: StateActor>(
-  moduleType: A.Type,
-  stateType: B.Type
+  moduleType _: A.Type,
+  stateType _: B.Type
  ) -> B {
   let key = A._mangledName.hashValue
 
@@ -139,7 +144,7 @@ extension Reflection {
 
    index.element.prepareContext(from: index, actor: state)
 
-   Task {
+   Task(priority: .high) { @Reflection in
     try await state.update()
    }
 
@@ -148,12 +153,11 @@ extension Reflection {
   return state as! B
  }
 
-
  @preconcurrency
  @usableFromInline
  static func callIfNeeded<A: StaticModule, B: StateActor>(
-  moduleType: A.Type,
-  stateType: B.Type
+  moduleType _: A.Type,
+  stateType _: B.Type
  ) -> B {
   let key = A._mangledName.hashValue
 
@@ -170,7 +174,7 @@ extension Reflection {
 
    index.element.prepareContext(from: index, actor: state)
 
-   Task { @Reflection in
+   Task(priority: .high) { @Reflection in
     try await state.update()
     try await state.context.callTasks()
    }
@@ -212,7 +216,7 @@ extension Reflection {
  static func cacheIfNeeded<A: StateActor>(
   id: AnyHashable,
   module: @autoclosure () -> some Module,
-  stateType: A.Type
+  stateType _: A.Type
  ) async throws -> A {
   let key = (id.base as? Int) ?? id.hashValue
 
@@ -240,8 +244,8 @@ extension Reflection {
  @discardableResult
  static func cacheIfNeeded<A: StateActor>(
   id: AnyHashable,
-  module: () -> some Module,
-  stateType: A.Type
+  module: @autoclosure () -> some Module,
+  stateType _: A.Type
  ) -> A {
   let key = (id.base as? Int) ?? id.hashValue
 
@@ -257,7 +261,7 @@ extension Reflection {
    let index = state.context.index
    index.element.prepareContext(from: index, actor: state)
 
-   Task { try await state.update() }
+   Task(priority: .high) { @Reflection in try await state.update() }
    return state
   }
   return state
@@ -269,7 +273,7 @@ extension Reflection {
  static func asyncCacheIfNeeded<A: StateActor>(
   id: AnyHashable,
   module: @autoclosure () -> some Module,
-  stateType: A.Type
+  stateType _: A.Type
  ) async throws -> A {
   let key = (id.base as? Int) ?? id.hashValue
 
@@ -297,7 +301,7 @@ extension Reflection {
  static func callModulePointer<A: StateActor>(
   id: AnyHashable,
   module: @autoclosure () -> some Module,
-  stateType: A.Type
+  stateType _: A.Type
  ) -> ModulePointer {
   let key = (id.base as? Int) ?? id.hashValue
 
@@ -315,7 +319,7 @@ extension Reflection {
 
    index.element.prepareContext(from: index, actor: initialState)
 
-   Task {
+   Task(priority: .high) { @Reflection in
     try await initialState.update()
     try await initialState.context.callTasks()
    }
@@ -323,7 +327,7 @@ extension Reflection {
    return withUnsafeMutablePointer(to: &index.element) { $0 }
   }
 
-  Task {
+  Task(priority: .high) { @Reflection in
    try await state.context.callAsFunction()
   }
 
@@ -337,7 +341,7 @@ extension Reflection {
  static func callAsyncModulePointer<A: StateActor>(
   id: AnyHashable,
   module: @autoclosure () -> some Module,
-  stateType: A.Type
+  stateType _: A.Type
  ) async throws -> ModulePointer {
   let key = (id.base as? Int) ?? id.hashValue
 
@@ -370,8 +374,8 @@ extension Reflection {
  @usableFromInline
  static func call<A: StateActor>(
   id: AnyHashable,
-  module: () -> some Module,
-  stateType: A.Type
+  module: @autoclosure () -> some Module,
+  stateType _: A.Type
  ) -> A {
   let key = (id.base as? Int) ?? id.hashValue
 
@@ -389,7 +393,7 @@ extension Reflection {
 
    index.element.prepareContext(from: index, actor: initialState)
 
-   Task {
+   Task(priority: .high) { @Reflection in
     try await initialState.update()
     try await initialState.context.callTasks()
    }
@@ -397,7 +401,7 @@ extension Reflection {
    return initialState
   }
 
-  Task {
+  Task(priority: .high) { @Reflection in
    try await state.context.callAsFunction()
   }
 
@@ -408,8 +412,8 @@ extension Reflection {
  @usableFromInline
  static func callAsync<A: StateActor>(
   id: AnyHashable,
-  module: () -> some Module,
-  stateType: A.Type
+  module: @autoclosure () -> some Module,
+  stateType _: A.Type
  ) async throws -> A {
   let key = (id.base as? Int) ?? id.hashValue
 
@@ -442,16 +446,16 @@ extension Reflection {
  @inlinable
  static func cacheOrCall<A: StateActor>(
   id: AnyHashable,
-  module: @autoclosure @escaping () -> some Module,
+  module: @autoclosure () -> some Module,
   stateType: A.Type,
   call: Bool
  ) -> A {
   if call {
-   Reflection.call(id: id, module: module, stateType: stateType)
+   Reflection.call(id: id, module: module(), stateType: stateType)
   } else {
    Reflection.cacheIfNeeded(
     id: id,
-    module: module,
+    module: module(),
     stateType: stateType
    )
   }
@@ -462,14 +466,14 @@ extension Reflection {
  @inlinable
  static func asyncCacheOrCall<A: StateActor>(
   id: AnyHashable,
-  module: @autoclosure @escaping () -> some Module,
+  module: some Module,
   stateType: A.Type,
   call: Bool
  ) async throws -> A {
   if call {
    try await Reflection.callAsync(id: id, module: module, stateType: stateType)
   } else {
-   Reflection.cacheIfNeeded(
+   try await Reflection.cacheIfNeeded(
     id: id,
     module: module,
     stateType: stateType
@@ -491,12 +495,12 @@ public extension Module {
 
   let context = state.context
   let contexts = context.cache.values
-  
+
   let contextInfo = "contexts: " + contexts.count.description.readable
   let reflectionInfo = "reflections: " +
    Reflection.states.count.description.readable
   let tasksInfo = "tasks: " +
-  contexts.map {
+   contexts.map {
     let tasks = $0.tasks
     return tasks.running.count + tasks.queue.count
    }

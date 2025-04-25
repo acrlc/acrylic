@@ -43,7 +43,7 @@ public extension Module {
   }
   return ()
  }
- 
+
  @_spi(ModuleReflection)
  @inline(__always)
  nonisolated var __erasedID: AnyHashable {
@@ -53,12 +53,15 @@ public extension Module {
  @_spi(ModuleReflection)
  @inline(__always)
  nonisolated var __id: String {
-  if let self = self as? any Identifiable {
-   let id = String(describing: self.id).readableRemovingQuotes
-   if id != "nil" {
-    return id
-   }
+  if self is any StaticModule || self is any ContextModule {
+   return Self._mangledName
   }
+
+  let id = String(describing: self.id).readableRemovingQuotes
+  if id != "nil" {
+   return id
+  }
+
   return Swift._mangledTypeName(Self.self) ?? typeConstructorName
  }
 
@@ -182,6 +185,7 @@ extension Optional: Module where Wrapped: Module {
  }
 }
 
+@_spi(ModuleReflection)
 public extension Module {
  @inlinable
  var avoid: Bool {
@@ -194,6 +198,7 @@ public extension Module {
 }
 
 import struct Core.EmptyID
+
 public extension Module {
  @_disfavoredOverload
  nonisolated var id: EmptyID { EmptyID(placeholder: "\(Self.self)") }

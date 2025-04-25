@@ -2,11 +2,12 @@
 public enum Modular {
  public typealias Component = any Module
  public typealias Components = Modules
+ public static func buildBlock() -> Never { fatalError() }
  public static func buildBlock(_ components: Component...) -> Components {
   components._flattened
  }
 
- public static func buildArray(_ components: [Component]) -> Components {
+ public static func buildArray(_ components: [Component] = .empty) -> Components {
   components._flattened
  }
 
@@ -29,6 +30,18 @@ public enum Modular {
   _ component: some Module
  ) -> Components {
   component
+ }
+ 
+ public static func buildBlock<A>(
+  _ action: @autoclosure @escaping () -> A
+ ) -> Perform<EmptyID, A> {
+  Perform(action: action)
+ }
+ 
+ public static func buildBlock<A>(
+  _ action: @escaping () async -> A
+ ) -> Perform<EmptyID, A>.Async {
+  Perform.Async(action: action)
  }
 
  public static func buildFinalResult(_ components: Component...) -> Components {

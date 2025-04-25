@@ -5,55 +5,64 @@ public protocol AsyncOperator: Actor {
 }
 
 public protocol AsyncOperation: Sendable, Detachable {
- associatedtype Output: Sendable
+ associatedtype Output
  associatedtype Failure: Error
  var priority: TaskPriority? { get set }
  var detached: Bool { get set }
- var perform: () async throws -> Output? { get }
+ var perform: @Sendable () async throws -> Output { get }
 }
 
 /// The endpoint for operations controlled by a module
 public struct AsyncTask
-<Output: Sendable, Failure: Error>: AsyncOperation, @unchecked Sendable {
+<Output, Failure: Error>: AsyncOperation, @unchecked Sendable {
  public var priority: TaskPriority?
  public var detached: Bool
- public let perform: () async throws -> Output?
+ public let perform: @Sendable () async throws -> Output
 
  public init(
   priority: TaskPriority? = nil,
   detached: Bool = false,
-  task: @Sendable @escaping () async throws -> Output?
+  task: @escaping @Sendable () async throws -> Output
  ) {
   self.priority = priority
   self.detached = detached
   perform = task
  }
- 
+
  public init(
   priority: TaskPriority? = nil,
   detached: Bool = false,
-  task: @Sendable @escaping () async -> Output?
+  task: @escaping @Sendable () async -> Output
  ) where Output == Void, Failure == Never {
   self.priority = priority
   self.detached = detached
   perform = task
  }
- 
 
  public static func detached(
   priority: TaskPriority? = nil,
   _ detached: Bool = true,
-  task: @Sendable @escaping () async throws -> Output?
+  task: @escaping @Sendable () async throws -> Output
  ) -> AsyncTask<Output, Failure> {
   AsyncTask<Output, Failure>(
    priority: priority, detached: detached, task: task
   )
  }
+ 
+// public static func detached(
+//  priority: TaskPriority? = nil,
+//  _ detached: Bool = true,
+//  task: @Sendable @escaping () async throws -> Any
+// ) -> AsyncTask<Any, Failure> {
+//  AsyncTask<Any, Failure>(
+//   priority: priority, detached: detached, task: task
+//  )
+// }
 
  public static func detached(
   priority: TaskPriority? = nil,
   _ detached: Bool = true,
-  task: @Sendable @escaping () async -> Output
+  task: @escaping @Sendable () async -> Output
  ) -> AsyncTask<Output, Failure> where Failure == Never {
   AsyncTask<Output, Failure>(
    priority: priority, detached: detached, task: task
@@ -61,7 +70,7 @@ public struct AsyncTask
  }
 
  @_transparent
- public func callAsFunction() async throws -> Output? {
+ public func callAsFunction() async throws -> Output {
   try await perform()
  }
 }
@@ -70,13 +79,12 @@ public struct AsyncTask
 /// tasks
 @globalActor
 public actor Tasks:
- @unchecked Sendable, AsyncOperator, Operational, ExpressibleAsEmpty
-{
+ @unchecked Sendable, AsyncOperator, Operational, ExpressibleAsEmpty {
  public static let shared = Tasks()
  public nonisolated static var empty: Self { Self() }
  public nonisolated var isEmpty: Bool { queue.keys.isEmpty }
 
- public typealias DefaultTask = AsyncTask<Sendable, any Error>
+ public typealias DefaultTask = AsyncTask<Any, any Error>
  public typealias Running = KeyValueStorage<any Operational>
  public typealias Detached = KeyValueStorage<any Operational>
 
@@ -89,19 +97,48 @@ public actor Tasks:
 
  @_spi(ModuleReflection)
  public nonisolated
- subscript(queue key: Int) -> DefaultTask? {
-  get { queue[key] }
+ subscript(queue key: Int) -> DefaultTask {
+  get { queue[unchecked: key] }
   set { queue[key] = newValue }
  }
 
- @_spi(ModuleReflection)
- public subscript(running key: Int) -> (any Operational)? {
-  running[key]
+ public nonisolated
+ subscript<A: Hashable>(queue key: A) -> DefaultTask {
+  get { queue[unchecked: key.hashValue] }
+  set { queue[key.hashValue] = newValue }
+ }
+ 
+ public nonisolated
+ subscript<A: Hashable>(queue key: A) -> DefaultTask? {
+  get { queue[key.hashValue] }
+  set { queue[key.hashValue] = newValue }
  }
 
  @_spi(ModuleReflection)
- public subscript(detached key: Int) -> (any Operational)? {
-  detached[key]
+ public subscript(running key: Int) -> (any Operational) {
+  running[unchecked: key]
+ }
+ 
+ @_spi(ModuleReflection)
+ public subscript(checkedRunning key: Int) -> (any Operational)? {
+  running[key]
+ }
+ 
+ public nonisolated
+ subscript<A: Hashable>(running key: A) -> (any Operational)? {
+  get { running[key.hashValue] }
+  set { running[key.hashValue] = newValue }
+ }
+
+ @_spi(ModuleReflection)
+ public subscript(detached key: Int) -> (any Operational) {
+  detached[unchecked: key]
+ }
+
+ public nonisolated
+ subscript<A: Hashable>(detached key: A) -> (any Operational)? {
+  get { detached[key.hashValue] }
+  set { detached[key.hashValue] = newValue }
  }
 
  public nonisolated var isCancelled: Bool {
@@ -148,6 +185,30 @@ public actor Tasks:
    }
    while detached.notEmpty {
     detached.popLast()?.cancel()
+   }
+  }
+ }
+
+ public nonisolated func cancel<A: Hashable>(_ key: A) {
+  let _key = key.hashValue
+  if let task = running[_key] {
+   task.cancel()
+   running.removeValue(for: _key)
+  } else if let task = detached[_key] {
+   task.cancel()
+   detached.removeValue(for: _key)
+  }
+ }
+
+ public func cancel<A: Hashable>(_ key: A) async {
+  await Tasks.run { @Sendable in
+   let _key = key.hashValue
+   if let task = running[_key] {
+    task.cancel()
+    running.removeValue(for: _key)
+   } else if let task = detached[_key] {
+    task.cancel()
+    detached.removeValue(for: _key)
    }
   }
  }
@@ -203,11 +264,29 @@ public actor Tasks:
      Task.detached(priority: task.priority, operation: task.perform), for: key
     )
    } else {
-    let task = Task(priority: task.priority, operation: task.perform)
+    let task = Task.detached(priority: task.priority, operation: task.perform)
     running.store(task, for: key)
 
     try await task.wait()
    }
+  }
+ }
+
+ public func callAsFunction<A: Hashable>(_ key: A) async throws {
+  let _key = key.hashValue
+  guard let offset = queue.offset(for: _key) else {
+   fatalError("No task with key \(key) was found in queue.")
+  }
+  let task = queue.values[offset]
+  if task.detached {
+   detached.store(
+    Task.detached(priority: task.priority, operation: task.perform), for: _key
+   )
+  } else {
+   let task = Task.detached(priority: task.priority, operation: task.perform)
+   running.store(task, for: _key)
+
+   try await task.wait()
   }
  }
 
@@ -236,12 +315,13 @@ public actor Tasks:
  @_spi(ModuleReflection)
  @discardableResult
  public static func detached<T: Sendable>(
+  priority: TaskPriority? = nil,
   resultType _: T.Type = T.self,
   body: @Tasks @escaping () throws -> T,
   onResult: @escaping (T) -> Void,
   onError: @escaping (any Error) -> Void
  ) -> Task<Void, Never> {
-  Task { @Tasks in
+  Task.detached(priority: priority) { @Tasks in
    do {
     try onResult(body())
    } catch {
@@ -253,11 +333,12 @@ public actor Tasks:
  @_spi(ModuleReflection)
  @discardableResult
  public static func detached<T: Sendable>(
+  priority: TaskPriority? = nil,
   resultType _: T.Type = T.self,
   body: @Tasks @escaping () throws -> T,
   onResult: @escaping (T) -> Void
  ) -> Task<Void, any Error> {
-  Task { @Tasks in
+  Task.detached(priority: priority) { @Tasks in
    try onResult(body())
   }
  }
@@ -265,11 +346,12 @@ public actor Tasks:
  @_spi(ModuleReflection)
  @discardableResult
  public static func detached<T: Sendable>(
+  priority: TaskPriority? = nil,
   resultType _: T.Type = T.self,
   body: @Tasks @escaping () throws -> T,
   onError: @escaping (any Error) -> Void
  ) -> Task<T?, Never> {
-  Task { @Tasks in
+  Task.detached(priority: priority) { @Tasks in
    do {
     return try body()
    } catch {
@@ -282,10 +364,11 @@ public actor Tasks:
  @_spi(ModuleReflection)
  @discardableResult
  public static func detached<T: Sendable>(
+  priority: TaskPriority? = nil,
   resultType _: T.Type = T.self,
   body: @Tasks @escaping () async throws -> T
  ) -> Task<T, any Error> {
-  Task { @Tasks in try await body() }
+  Task.detached(priority: priority) { @Tasks in try await body() }
  }
 }
 
@@ -346,7 +429,7 @@ extension Tasks: AsyncSequence {
       Task.detached(priority: task.priority, operation: task.perform), for: key
      )
     } else {
-     let task = Task(priority: task.priority, operation: task.perform)
+     let task = Task.detached(priority: task.priority, operation: task.perform)
      tasks.running.store(task, for: key)
 
      try await task.wait()
@@ -468,6 +551,19 @@ public extension Tasks {
     return _offsets[offset]
    }
    fatalError("No value was stored for key: '\(key)'")
+  }
+
+  @inline(__always)
+  func offset(for key: Int) -> Int? {
+   var offset = 0
+   while offset < _keysOffset {
+    guard _keys[offset] == key else {
+     offset += 1
+     continue
+    }
+    return _offsets[offset]
+   }
+   return nil
   }
  }
 }

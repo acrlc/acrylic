@@ -56,8 +56,7 @@ public struct _DynamicContextBindingProperty
 @propertyWrapper
 public struct _ObservedContextAliasProperty
 <A: ContextModule, Value: Sendable>:
- @unchecked Sendable, DynamicProperty
-{
+ @unchecked Sendable, DynamicProperty {
  public var id = A._mangledName.hashValue
 
  @usableFromInline
@@ -163,7 +162,7 @@ public extension _ObservedContextAliasProperty {
  }
 
  @_disfavoredOverload
- init(_: A.Type, _ call: Bool = false) where Value == A {
+ init(_ call: Bool = false) where Value == A {
   keyPath = \A.self
   _context = ObservedObject(
    wrappedValue:
@@ -172,6 +171,18 @@ public extension _ObservedContextAliasProperty {
     module: A(),
     stateType: ModuleState.self,
     call: call
+   ).context
+  )
+ }
+ 
+ init() where Value == A {
+  keyPath = \A.self
+  _context = ObservedObject(
+   wrappedValue:
+   Reflection.cacheIfNeeded(
+    id: A._mangledName,
+    module: A(),
+    stateType: ModuleState.self
    ).context
   )
  }
@@ -237,9 +248,8 @@ public extension _ObservedContextAliasProperty {
  }
 
  @_disfavoredOverload
- init(_: A.Type, _ call: Bool = false, animation: Animation)
-  where Value == A
- {
+ init(_ call: Bool = false, animation: Animation)
+  where Value == A {
   keyPath = \A.self
   _context = ObservedObject(
    wrappedValue:
@@ -253,6 +263,18 @@ public extension _ObservedContextAliasProperty {
   self.animation = animation
  }
 
+ init(animation: Animation) where Value == A {
+  keyPath = \A.self
+  _context = ObservedObject(
+   wrappedValue:
+   Reflection.cacheIfNeeded(
+    id: A._mangledName,
+    module: A(),
+    stateType: ModuleState.self
+   ).context
+  )
+  self.animation = animation
+ }
  #endif
 }
 
@@ -261,12 +283,16 @@ public extension View {
   where A: StaticModule
  typealias ObservedAlias<A, Value> = _ObservedModuleAliasProperty<A, Value>
   where A: ObservableModule
+ typealias ObservedModule<A> = _ObservedModuleAliasProperty<A, A>
+  where A: ObservableModule
  typealias ContextAlias<A, Value> = _ObservedContextAliasProperty<A, Value>
   where A: ContextModule
- typealias StaticObservedAlias<A, Value> = _StaticObservedModuleAliasProperty<
-  A,
-  Value
- >
+ typealias ObservedContext<A> = _ObservedContextAliasProperty<A, A>
+  where A: ContextModule
+ typealias StaticObservedAlias<A, Value> =
+  _StaticObservedModuleAliasProperty<A, Value>
+   where A: StaticModule
+ typealias StaticObservedModule<A> = _StaticObservedModuleAliasProperty<A, A>
   where A: StaticModule
 }
 
@@ -275,12 +301,16 @@ public extension App {
   where A: StaticModule
  typealias ObservedAlias<A, Value> = _ObservedModuleAliasProperty<A, Value>
   where A: ObservableModule
+ typealias ObservedModule<A> = _ObservedModuleAliasProperty<A, A>
+  where A: ObservableModule
  typealias ContextAlias<A, Value> = _ObservedContextAliasProperty<A, Value>
   where A: ContextModule
- typealias StaticObservedAlias<A, Value> = _StaticObservedModuleAliasProperty<
-  A,
-  Value
- >
+ typealias ObservedContext<A> = _ObservedContextAliasProperty<A, A>
+  where A: ContextModule
+ typealias StaticObservedAlias<A, Value> =
+  _StaticObservedModuleAliasProperty<A, Value>
+   where A: StaticModule
+ typealias StaticObservedModule<A> = _StaticObservedModuleAliasProperty<A, A>
   where A: StaticModule
 }
 
@@ -289,6 +319,17 @@ public extension Scene {
   where A: StaticModule
  typealias ObservedAlias<A, Value> = _ObservedModuleAliasProperty<A, Value>
   where A: ObservableModule
+ typealias ObservedModule<A> = _ObservedModuleAliasProperty<A, A>
+  where A: ObservableModule
+ typealias ContextAlias<A, Value> = _ObservedContextAliasProperty<A, Value>
+  where A: ContextModule
+ typealias ObservedContext<A> = _ObservedContextAliasProperty<A, A>
+  where A: ContextModule
+ typealias StaticObservedAlias<A, Value> =
+  _StaticObservedModuleAliasProperty<A, Value>
+   where A: StaticModule
+ typealias StaticObservedModule<A> = _StaticObservedModuleAliasProperty<A, A>
+  where A: StaticModule
 }
 
 #if canImport(SwiftUI)
@@ -297,6 +338,17 @@ public extension Commands {
   where A: StaticModule
  typealias ObservedAlias<A, Value> = _ObservedModuleAliasProperty<A, Value>
   where A: ObservableModule
+ typealias ObservedModule<A> = _ObservedModuleAliasProperty<A, A>
+  where A: ObservableModule
+ typealias ContextAlias<A, Value> = _ObservedContextAliasProperty<A, Value>
+  where A: ContextModule
+ typealias ObservedContext<A> = _ObservedContextAliasProperty<A, A>
+  where A: ContextModule
+ typealias StaticObservedAlias<A, Value> =
+  _StaticObservedModuleAliasProperty<A, Value>
+   where A: StaticModule
+ typealias StaticObservedModule<A> = _StaticObservedModuleAliasProperty<A, A>
+  where A: StaticModule
 }
 
 public extension ToolbarContent {
@@ -304,6 +356,17 @@ public extension ToolbarContent {
   where A: StaticModule
  typealias ObservedAlias<A, Value> = _ObservedModuleAliasProperty<A, Value>
   where A: ObservableModule
+ typealias ObservedModule<A> = _ObservedModuleAliasProperty<A, A>
+  where A: ObservableModule
+ typealias ContextAlias<A, Value> = _ObservedContextAliasProperty<A, Value>
+  where A: ContextModule
+ typealias ObservedContext<A> = _ObservedContextAliasProperty<A, A>
+  where A: ContextModule
+ typealias StaticObservedAlias<A, Value> =
+  _StaticObservedModuleAliasProperty<A, Value>
+   where A: StaticModule
+ typealias StaticObservedModule<A> = _StaticObservedModuleAliasProperty<A, A>
+  where A: StaticModule
 }
 #endif
 
@@ -311,8 +374,7 @@ public extension ToolbarContent {
 @propertyWrapper
 public struct _ObservedModuleAliasProperty
 <A: ObservableModule, Value: Sendable>:
- @unchecked Sendable, ContextualProperty
-{
+ @unchecked Sendable, ContextualProperty {
  public var id = A._mangledName.hashValue
  public var context: ModuleContext
 
@@ -409,12 +471,20 @@ public extension _ObservedModuleAliasProperty {
  }
 
  @_disfavoredOverload
- init(_: A.Type, _ call: Bool = false) where Value == A {
+ init(_ call: Bool = false) where Value == A {
   keyPath = \A.self
   context = Reflection.cacheOrCall(
    moduleType: A.self,
    stateType: ModuleState.self,
    call: call
+  ).context
+ }
+
+ init<B: ObservableModule>() where A == B, Value == A {
+  keyPath = \A.self
+  context = Reflection.cacheIfNeeded(
+   moduleType: A.self,
+   stateType: ModuleState.self
   ).context
  }
 
@@ -468,12 +538,11 @@ public extension _ObservedModuleAliasProperty {
  }
 
  @_disfavoredOverload
- init(_: A.Type, _ call: Bool = false, animation: Animation)
-  where Value == A
- {
+ init(_ type: A.Type = A.self, _ call: Bool = false, animation: Animation)
+  where Value == A {
   keyPath = \A.self
   context = Reflection.cacheOrCall(
-   moduleType: A.self,
+   moduleType: type,
    stateType: ModuleState.self,
    call: call
   ).context
@@ -493,8 +562,7 @@ extension _ObservedModuleAliasProperty: ObservedProperty {
 @propertyWrapper
 public struct _StaticObservedModuleAliasProperty
 <A: StaticModule, Value: Sendable>:
- @unchecked Sendable, DynamicProperty
-{
+ @unchecked Sendable, DynamicProperty {
  public var id = A._mangledName.hashValue
 
  @usableFromInline
@@ -668,8 +736,7 @@ public extension _StaticObservedModuleAliasProperty {
 
  @_disfavoredOverload
  init(_: A.Type, _ call: Bool = false, animation: Animation)
-  where Value == A
- {
+  where Value == A {
   keyPath = \A.self
   _context = ObservedObject(
    wrappedValue:
@@ -697,8 +764,7 @@ extension _StaticObservedModuleAliasProperty: ObservedProperty {
 @propertyWrapper
 public struct _StaticModuleAliasProperty
 <A: StaticModule, Value: Sendable>:
- @unchecked Sendable, ContextualProperty
-{
+ @unchecked Sendable, ContextualProperty {
  public var id = A._mangledName.hashValue
  @usableFromInline
  let keyPath: WritableKeyPath<A, Value>
@@ -838,8 +904,7 @@ public extension _StaticModuleAliasProperty {
 
  @_disfavoredOverload
  init(_: A.Type, _ call: Bool = false, animation: Animation)
-  where Value == A
- {
+  where Value == A {
   keyPath = \A.self
   context = Reflection.cacheOrCall(
    moduleType: A.self,
@@ -854,8 +919,7 @@ public extension _StaticModuleAliasProperty {
 @propertyWrapper
 public struct _ContextAliasProperty
 <A: ContextModule, Value: Sendable>:
- @unchecked Sendable, ContextualProperty
-{
+ @unchecked Sendable, ContextualProperty {
  public var id = A._mangledName.hashValue
 
  @usableFromInline
@@ -1015,8 +1079,7 @@ public extension _ContextAliasProperty {
 
  @_disfavoredOverload
  init(_: A.Type, _ call: Bool = false, animation: Animation)
-  where Value == A
- {
+  where Value == A {
   keyPath = \A.self
   context = Reflection.cacheOrCall(
    id: A._mangledName,

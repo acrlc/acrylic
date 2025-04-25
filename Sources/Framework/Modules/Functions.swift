@@ -98,7 +98,6 @@ public extension AsyncFunction where VoidFunction == EmptyModule {
 public extension Modules {
  @_disfavoredOverload
  @discardableResult
- @inlinable
  func callAsFunction() async throws -> [Sendable] {
   var results: [Sendable] = []
   var detached = [Task<Sendable, Error>]()
@@ -246,13 +245,13 @@ public extension Modular {
   public var id: ID?
   public var priority: TaskPriority?
   public var detached: Bool = false
-  public let perform: () throws -> ()
+  public let perform: () throws -> Void
 
   public init(
    _ id: ID,
    priority: TaskPriority? = nil,
    detached: Bool = false,
-   @_implicitSelfCapture perform: @escaping () throws -> ()
+   @_implicitSelfCapture perform: @escaping () throws -> Void
   ) {
    self.id = id
    self.priority = priority
@@ -263,7 +262,7 @@ public extension Modular {
   public init(
    priority: TaskPriority? = nil,
    detached: Bool = false,
-   @_implicitSelfCapture perform: @escaping () throws -> ()
+   @_implicitSelfCapture perform: @escaping () throws -> Void
   ) where ID == EmptyID {
    self.priority = priority
    self.detached = detached
@@ -274,7 +273,7 @@ public extension Modular {
    _ id: ID,
    priority: TaskPriority? = nil,
    _ detached: Bool = true,
-   @_implicitSelfCapture perform: @escaping () throws -> ()
+   @_implicitSelfCapture perform: @escaping () throws -> Void
   ) -> Self {
    self.init(id, priority: priority, detached: detached, perform: perform)
   }
@@ -282,7 +281,7 @@ public extension Modular {
   public static func detached(
    priority: TaskPriority? = nil,
    _ detached: Bool = true,
-   @_implicitSelfCapture perform: @escaping () throws -> ()
+   @_implicitSelfCapture perform: @escaping () throws -> Void
   ) -> Self where ID == EmptyID {
    self.init(priority: priority, detached: detached, perform: perform)
   }
@@ -300,7 +299,7 @@ public extension Modular.Perform {
   public var id: ID?
   public var priority: Priority?
   public var detached: Bool
-  public let action: @Sendable () async throws -> Output
+  public let action: @isolated(any) @Sendable () async throws -> Output
 
   public func callAsFunction() async throws -> Output {
    try await action()
@@ -313,7 +312,7 @@ public extension Modular.Perform.Async {
   _ id: ID,
   priority: Priority? = nil,
   detached: Bool = false,
-  @_implicitSelfCapture action: @Sendable @escaping () async throws -> Output
+  @_implicitSelfCapture action: @isolated(any) @Sendable @escaping () async throws -> Output
  ) {
   self.id = id
   self.priority = priority
@@ -324,7 +323,7 @@ public extension Modular.Perform.Async {
  init(
   priority: Priority? = nil,
   detached: Bool = false,
-  @_implicitSelfCapture action: @Sendable @escaping () async throws -> Output
+  @_implicitSelfCapture action: @isolated(any) @Sendable @escaping () async throws -> Output
  ) where ID == EmptyID {
   self.priority = priority
   self.detached = detached
@@ -360,7 +359,7 @@ public extension Modular.Perform.Async {
   _ id: ID,
   priority: TaskPriority? = nil,
   _ detached: Bool = true,
-  @_implicitSelfCapture action: @Sendable @escaping () async throws -> Output
+  @_implicitSelfCapture action: @isolated(any) @Sendable @escaping () async throws -> Output
  ) -> Self {
   self.init(id, priority: priority, detached: detached, action: action)
  }
@@ -368,7 +367,7 @@ public extension Modular.Perform.Async {
  static func detached(
   priority: TaskPriority? = nil,
   _ detached: Bool = true,
-  @_implicitSelfCapture action: @Sendable @escaping () async throws -> Output
+  @_implicitSelfCapture action: @isolated(any) @Sendable @escaping () async throws -> Output
  ) -> Self where ID == EmptyID {
   self.init(priority: priority, detached: detached, action: action)
  }
@@ -379,7 +378,7 @@ public extension Modular.Repeat {
   public var id: ID?
   public var priority: TaskPriority?
   public var detached: Bool = false
-  public let perform: @Sendable () async throws -> Bool
+  public let perform: @isolated(any) @Sendable () async throws -> Bool
   public func callAsFunction() async throws {
    while try await perform() {
     continue
@@ -393,7 +392,7 @@ public extension Modular.Repeat.Async {
   _ id: ID,
   priority: TaskPriority? = nil,
   detached: Bool = false,
-  @_implicitSelfCapture perform: @Sendable @escaping () async throws -> Bool
+  @_implicitSelfCapture perform: @isolated(any) @Sendable @escaping () async throws -> Bool
  ) {
   self.id = id
   self.priority = priority
@@ -404,7 +403,7 @@ public extension Modular.Repeat.Async {
  init(
   priority: TaskPriority? = nil,
   detached: Bool = false,
-  @_implicitSelfCapture perform: @Sendable @escaping () async throws -> Bool
+  @_implicitSelfCapture perform: @isolated(any) @Sendable @escaping () async throws -> Bool
  ) where ID == EmptyID {
   self.priority = priority
   self.detached = detached
@@ -415,7 +414,7 @@ public extension Modular.Repeat.Async {
   _ id: ID,
   priority: TaskPriority? = nil,
   _ detached: Bool = true,
-  @_implicitSelfCapture perform: @Sendable @escaping () async throws -> Bool
+  @_implicitSelfCapture perform: @isolated(any) @Sendable @escaping () async throws -> Bool
  ) -> Self {
   self.init(id, priority: priority, detached: detached, perform: perform)
  }
@@ -423,7 +422,7 @@ public extension Modular.Repeat.Async {
  static func detached(
   priority: TaskPriority? = nil,
   _ detached: Bool = true,
-  @_implicitSelfCapture perform: @Sendable @escaping () async throws -> Bool
+  @_implicitSelfCapture perform: @isolated(any) @Sendable @escaping () async throws -> Bool
  ) -> Self where ID == EmptyID {
   self.init(priority: priority, detached: detached, perform: perform)
  }
@@ -434,7 +433,7 @@ public extension Modular.Loop {
   public var id: ID?
   public var priority: TaskPriority?
   public var detached: Bool = false
-  public let perform: @Sendable () async throws -> ()
+  public let perform: @Sendable () async throws -> Void
   public func callAsFunction() async throws {
    repeat {
     try await perform()
@@ -448,7 +447,7 @@ public extension Modular.Loop.Async {
   _ id: ID,
   priority: TaskPriority? = nil,
   detached: Bool = false,
-  @_implicitSelfCapture perform: @Sendable @escaping () async throws -> ()
+  @_implicitSelfCapture perform: @Sendable @escaping () async throws -> Void
  ) {
   self.id = id
   self.priority = priority
@@ -459,7 +458,7 @@ public extension Modular.Loop.Async {
  init(
   priority: TaskPriority? = nil,
   detached: Bool = false,
-  @_implicitSelfCapture perform: @Sendable @escaping () async throws -> ()
+  @_implicitSelfCapture perform: @Sendable @escaping () async throws -> Void
  ) where ID == EmptyID {
   self.priority = priority
   self.detached = detached
@@ -470,7 +469,7 @@ public extension Modular.Loop.Async {
   _ id: ID,
   priority: TaskPriority? = nil,
   _ detached: Bool = true,
-  @_implicitSelfCapture perform: @Sendable @escaping () async throws -> ()
+  @_implicitSelfCapture perform: @Sendable @escaping () async throws -> Void
  ) -> Self {
   self.init(id, priority: priority, detached: detached, perform: perform)
  }
@@ -478,7 +477,7 @@ public extension Modular.Loop.Async {
  static func detached(
   priority: TaskPriority? = nil,
   _ detached: Bool = true,
-  @_implicitSelfCapture perform: @Sendable @escaping () async throws -> ()
+  @_implicitSelfCapture perform: @Sendable @escaping () async throws -> Void
  ) -> Self where ID == EmptyID {
   self.init(priority: priority, detached: detached, perform: perform)
  }

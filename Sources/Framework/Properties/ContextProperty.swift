@@ -51,7 +51,6 @@ public protocol ContextualProperty: Identifiable, DynamicProperty, Sendable {
 public struct
 ContextProperty<Value: Sendable>: @unchecked Sendable, ContextualProperty {
  public var id = UUID().hashValue
- public var offset: Int!
  public unowned var context: ModuleContext = .unknown {
   didSet {
    initialize(from: oldValue, to: context)
@@ -60,19 +59,25 @@ ContextProperty<Value: Sendable>: @unchecked Sendable, ContextualProperty {
 
  @usableFromInline
  var get: (Self) -> Value = { `self` in
-  self.context.values.withReaderLock { $0[unchecked: self.id, as: Value.self] }
+  self.context.values[unchecked: self.id, as: Value.self]
+//  self.context.values.withReaderLock { $0[unchecked: self.id, as: Value.self] }
  }
 
  @usableFromInline
- var set: (Self, Value) -> () = { `self`, newValue in
-  self.context.values.withWriterLockVoid {
-   $0[self.id, as: Value.self] = newValue
-  }
+ var set: (Self, Value) -> Void = { `self`, newValue in
+//  self.context.values.withWriterLockVoid {
+//   $0[self.id, as: Value.self] = newValue
+//  }
+  //Task {
+   /*await*/ self.context.values[self.id, as: Value.self] = newValue
+  //}
  }
 
  @_transparent
  public var wrappedValue: Value {
+  @Sendable
   get { get(self) }
+  @Sendable
   nonmutating set { set(self, newValue) }
  }
 
@@ -96,7 +101,7 @@ ContextProperty<Value: Sendable>: @unchecked Sendable, ContextualProperty {
 
  public init(
   get: @escaping () -> Value,
-  set: @escaping (Value) -> ()
+  set: @escaping (Value) -> Void
  ) {
   self.get = { _ in get() }
   self.set = { _, newValue in set(newValue) }
@@ -104,7 +109,7 @@ ContextProperty<Value: Sendable>: @unchecked Sendable, ContextualProperty {
 
  public init(
   get: @escaping (Self) -> Value,
-  set: @escaping (Self, Value) -> ()
+  set: @escaping (Self, Value) -> Void
  ) {
   self.get = get
   self.set = set
@@ -112,14 +117,14 @@ ContextProperty<Value: Sendable>: @unchecked Sendable, ContextualProperty {
 
  static func binding(
   get: @escaping (Self) -> Value,
-  set: @escaping (Self, Value) -> ()
+  set: @escaping (Self, Value) -> Void
  ) -> Self {
   self.init(get: get, set: set)
  }
 
  static func binding(
   get: @escaping () -> Value,
-  set: @escaping (Value) -> ()
+  set: @escaping (Value) -> Void
  ) -> Self {
   self.init(get: get, set: set)
  }
@@ -127,16 +132,10 @@ ContextProperty<Value: Sendable>: @unchecked Sendable, ContextualProperty {
  static func bindingInitalValueWithContext(_ initialValue: Value) -> Self {
   self.init(
    get: { `self` in
-    self.context.values.withReaderLock {
-     $0[self.id, as: Value.self] ?? initialValue
-    }
+    self.context.values[self.id, as: Value.self] ?? initialValue
    }, set: { `self`, newValue in
-    self.context.values.withWriterLockVoid {
-     if let offset = $0.offset(for: self.id) {
-      $0.updateValue(newValue, at: offset)
-     } else {
-      $0.store(newValue, for: self.id)
-     }
+    self.context._values.withWriterLockVoid {
+     $0.updateValue(newValue, forKey: self.id)
     }
    }
   )
@@ -173,7 +172,7 @@ public extension ContextProperty {
   #if canImport(Combine) || canImport(OpenCombine)
   // hold back state updates if context is active
   if state < .active {
-   Task { @MainActor in
+   Task(priority: .high) { @MainActor in
     context.objectWillChange.send()
    }
   }
@@ -181,7 +180,7 @@ public extension ContextProperty {
   #endif
   // update context if it's not the initial state
   if state > .initial {
-   Task { @Reflection in
+   Task(priority: .high) { @Reflection in
     do { try await context.update() }
     catch _ as CancellationError {
      return
@@ -201,35 +200,34 @@ public extension ContextProperty {
   )
 
   let id = id
-  if let value = oldContext.values.withReaderLock({ $0[id, as: Value.self] }) {
-   oldContext.values.withWriterLockVoid {
-    $0.removeValue(for: self.id)
-    newContext.values.withWriterLockVoid {
-     self.offset = $0.store(value, for: self.id)
-    }
+  if let value = oldContext._values.withReaderLock({ $0[id, as: Value.self] }) {
+   oldContext._values.withWriterLockVoid {
+    $0.removeValue(forKey: self.id)
    }
   } else {
    let initialValue = get(self)
-   newContext.values.withWriterLockVoid {
-    self.offset = $0.store(initialValue, for: self.id)
+   newContext._values.withWriterLockVoid {
+   $0.updateValue(initialValue, forKey: id)
+//    self.offset = $0.store(initialValue, for: self.id)
    }
   }
 
   // update to offset bindings realizing the offset
-  self.get = { `self` in
-   self.context.values.withReaderLock {
-    $0.uncheckedValue(at: self.offset, as: Value.self)
-   }
-  }
+//  self.get = { `self` in
+//   self.context._values.withReaderLock {
+//    $0[unchecked: id, as: <#T##Sendable.Type#>], as: Value.self)
+//   }
+//  }
 
-  self.set = { `self`, newValue in
-   self.context.values.withWriterLockVoid {
-    $0.updateValue(newValue, at: self.offset)
-   }
-  }
+//  self.set = { `self`, newValue in
+//   self.context._values.withWriterLockVoid {
+//    $0.updateValue(newValue, at: self.offset)
+//   }
+//  }
  }
 }
 
+@Reflection
 public extension ContextProperty {
  func callAsFunction() async throws {
   assert(
@@ -287,7 +285,7 @@ public extension ContextProperty {
   _ value: @escaping (inout Value) throws -> A
  ) rethrows -> A {
   defer {
-   Task {
+   Task.detached(priority: .userInitiated) { @Reflection in
     try await self.callAsFunction()
    }
    context.objectWillChange.send()
@@ -302,8 +300,8 @@ public extension ContextProperty {
 
  func callWithState(_ newValue: Value) {
   wrappedValue = newValue
-  Task {
-   try await callAsFunction()
+  Task.detached(priority: .userInitiated) { @Reflection in
+   try await self.callAsFunction()
   }
   context.objectWillChange.send()
  }
@@ -350,7 +348,7 @@ extension ContextProperty: Codable where Value: Codable {
 extension ContextProperty {
  func withBinding(
   get: @escaping (Self) -> Value,
-  set: @escaping (Self, Value) -> ()
+  set: @escaping (Self, Value) -> Void
  ) -> Self {
   var copy = self
   copy.get = get
@@ -360,7 +358,7 @@ extension ContextProperty {
 
  func withBinding(
   get: @escaping () -> Value,
-  set: @escaping (Value) -> ()
+  set: @escaping (Value) -> Void
  ) -> Self {
   var copy = self
   copy.get = { _ in get() }

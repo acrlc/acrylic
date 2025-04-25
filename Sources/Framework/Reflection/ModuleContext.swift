@@ -25,7 +25,7 @@ open class ModuleContext:
  public var actor: StateActor!
  public var tasks: Tasks = .empty
  @_spi(ModuleReflection)
- public var cache: KeyValueStorage<ModuleContext> = .empty
+ public var cache: Dictionary<Int, ModuleContext> = .empty
 
  @_spi(ModuleReflection)
  public var index: ModuleIndex = .start
@@ -33,8 +33,66 @@ open class ModuleContext:
  public var modules: Modules = .empty
  @_spi(ModuleReflection)
  public var indices: Indices = .empty
+
  @_spi(ModuleReflection)
- public var values = ReadWriteLockedValue<AnyKeyValueStorage>(.empty)
+ @dynamicMemberLookup
+ @globalActor
+ public final actor Values {
+  public typealias Storage = Dictionary<Int, Any>
+  public static let shared = Values()
+  @_spi(ModuleReflection)
+  public nonisolated(unsafe) var storage: Storage = .empty
+  public subscript<A>(dynamicMember keyPath: WritableKeyPath<Storage, A>) -> A {
+   get { storage[keyPath: keyPath] }
+   set { storage[keyPath: keyPath] = newValue }
+  }
+  
+  private nonisolated let lock = ReadWriteLock()
+  public nonisolated func withReaderLock<A>(
+   _ body: (inout Storage) throws -> A
+  ) rethrows -> A {
+   try lock.withReaderLock {
+    try body(&storage)
+   }
+  }
+
+  public nonisolated func withWriterLock<A>(
+   _ body: (inout Storage) throws -> A
+  ) rethrows -> A {
+   try lock.withWriterLock {
+    try body(&storage)
+   }
+  }
+
+  public nonisolated func withReaderLockVoid(
+   _ body: (inout Storage) throws -> Void
+  ) rethrows {
+   try lock.withReaderLockVoid {
+    try body(&storage)
+   }
+  }
+
+  public nonisolated func withWriterLockVoid(
+   _ body: (inout Storage) throws -> Void
+  ) rethrows {
+   try lock.withWriterLockVoid {
+    try body(&storage)
+   }
+  }
+ }
+
+ @_spi(ModuleReflection)
+ public var _values = Values()
+
+ @_spi(ModuleReflection)
+ public var values: Values.Storage {
+  get { _values.withReaderLock { $0 } }
+  set {
+   Task.detached(priority: .userInitiated) { @Values [unowned self] in
+    self._values.storage = newValue
+   }
+  }
+ }
 
  /// - Note: Results feature not implemented but may return in some form
  ///
@@ -249,7 +307,7 @@ public extension ModuleContext {
  /// - parameter id: The `id` property of the module that needs to be restarted
  /// - throws: Any potential error returned by the targeted module
  ///
- func restart(_ id: some Hashable) -> Task<(), any Error> {
+ func restart(_ id: some Hashable) -> Task<Void, any Error> {
   let tasks = self[id].tasks
   return Tasks.detached {
    await tasks.cancel()
@@ -283,5 +341,15 @@ public extension ModuleContext {
  func waitForAll(on id: some Hashable) async throws {
   let tasks = self[id].tasks
   try await tasks.waitForAll()
+ }
+}
+
+extension ModuleContext.Values.Storage {
+ subscript<A>(unchecked key: Key, as type: A.Type) -> A {
+  self[key] as! A
+ }
+ subscript<A>(_ key: Key, as type: A.Type) -> A? {
+  get { self[key] as? A }
+  set { self.updateValue(newValue!, forKey: key) }
  }
 }

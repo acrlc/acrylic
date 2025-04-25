@@ -27,7 +27,7 @@ public extension ObservableModule {
  @MainActor
  func callState<Result>(action: @Sendable (Self) -> Result) -> Result {
   defer {
-   Task { @Reflection in try await Self.context() }
+   Task.detached { @Reflection in try await Self.context() }
   }
   objectWillChange.send()
   return action(self)
@@ -37,13 +37,13 @@ public extension ObservableModule {
  func callState(action: @Sendable (Self) -> ()) {
   objectWillChange.send()
   action(self)
-  Task { @Reflection in try await Self.context() }
+  Task.detached { @Reflection in try await Self.context() }
  }
 
  @MainActor
  func callState(action: @Sendable () -> ()) {
   objectWillChange.send()
   action()
-  Task { @Reflection in try await Self.context() }
+  Task.detached { @Reflection in try await Self.context() }
  }
 }
